@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "worker"
+version = "0.1.0"
+description = "Worker para procesamiento de jobs"
+authors = ["Your Name <you@example.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+numpy = "*"
+pandas = "*"
+scikit-learn = "*"
+joblib = "*"
+pyyaml = "*"
+tqdm = "*"
+boto3 = "*"
+kubernetes = "*"
+pydantic = "*"
+typer = "*"
+loguru = "*"

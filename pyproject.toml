@@ -1,0 +1,31 @@
+[tool.poetry]
+name = "modelsearchcore"
+version = "0.1.0"
+description = "Project dependencies for ModelSearchCore"
+authors = ["Your Name <you@example.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+
+# Core
+numpy = "*"
+pandas = "*"
+scikit-learn = "*"
+joblib = "*"
+pyyaml = "*"
+tqdm = "*"
+
+# AWS
+boto3 = "*"
+
+# Kubernetes
+kubernetes = "*"
+
+# Configs
+pydantic = "*"
+
+# CLI
+typer = "*"
+
+# Logging
+loguru = "*"

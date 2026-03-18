@@ -1,0 +1,14 @@
+[tool.poetry]
+name = "mlflow-service"
+version = "0.1.0"
+description = "Servicio para gestión de experimentos con MLflow"
+authors = ["Your Name <you@example.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+mlflow = "*"
+pandas = "*"
+numpy = "*"
+scikit-learn = "*"
+pyyaml = "*"
+loguru = "*"

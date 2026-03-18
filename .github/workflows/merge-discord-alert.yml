@@ -1,0 +1,19 @@
+name: Merge Discord Alert
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  notify:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Discord notification for Merge
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: |
+          curl -H "Content-Type: application/json" \
+            -X POST \
+            -d '{"content": "Pull Request mergeada en el repositorio!"}' \
+            $DISCORD_WEBHOOK
