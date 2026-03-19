@@ -18,3 +18,16 @@ services:
       - KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092
     depends_on:
       - zookeeper
+
+  worker:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - KAFKA_BROKER=kafka:9092
+      - KAFKA_TOPIC=topic-jobs
+    depends_on:
+      - kafka
+    restart: on-failure
