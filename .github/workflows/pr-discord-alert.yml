@@ -1,44 +1,26 @@
-name: Discord PR opened
-
+name: Discord PR notifications
 on:
   pull_request:
-    types: [opened, reopened]
+    types: [opened, reopened, ready_for_review, closed]
 
 jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
-      - name: Send message to Discord
+      - name: Notify PR opened
+        if: github.event.action != 'closed'
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          REPO: ${{ github.repository }}
-          AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
-          python - <<'PY'
-          import json
-          import os
-          import urllib.request
+          curl -X POST -H "Content-Type: application/json" \
+            -d "{\"content\":\"PR opened: #${{ github.event.pull_request.number }} - ${{ github.event.pull_request.title }}\n${{ github.event.pull_request.html_url }}\"}" \
+            "$DISCORD_WEBHOOK_URL"
 
-          content = (
-              f"Nueva PR abierta: #{os.environ['PR_NUMBER']} - {os.environ['PR_TITLE']}\n"
-              f"{os.environ['PR_URL']}"
-          )
-
-          payload = {
-              "username": "GitHub",
-              "content": content
-          }
-
-          req = urllib.request.Request(
-              os.environ["DISCORD_WEBHOOK_URL"],
-              data=json.dumps(payload).encode("utf-8"),
-              headers={"Content-Type": "application/json"},
-              method="POST"
-          )
-
-          with urllib.request.urlopen(req) as resp:
-              print(resp.status)
-          PY
+      - name: Notify PR merged
+        if: github.event.action == 'closed' && github.event.pull_request.merged == true
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          curl -X POST -H "Content-Type: application/json" \
+            -d "{\"content\":\" PR merged: #${{ github.event.pull_request.number }} - ${{ github.event.pull_request.title }}\n${{ github.event.pull_request.html_url }}\"}" \
+            "$DISCORD_WEBHOOK_URL"
