@@ -1,4 +1,4 @@
-name: Merge Discord Alert
+name: Discord PR merged
 
 on:
   pull_request:
@@ -9,11 +9,37 @@ jobs:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
-      - name: Send Discord notification for Merge
+      - name: Send message to Discord
         env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          REPO: ${{ github.repository }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
-          curl -H "Content-Type: application/json" \
-            -X POST \
-            -d '{"content": "Pull Request mergeada en el repositorio!"}' \
-            $DISCORD_WEBHOOK
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          content = (
+              f"PR merged: #{os.environ['PR_NUMBER']} - {os.environ['PR_TITLE']}\n"
+              f"{os.environ['PR_URL']}"
+          )
+
+          payload = {
+              "username": "GitHub",
+              "content": content
+          }
+
+          req = urllib.request.Request(
+              os.environ["DISCORD_WEBHOOK_URL"],
+              data=json.dumps(payload).encode("utf-8"),
+              headers={"Content-Type": "application/json"},
+              method="POST"
+          )
+
+          with urllib.request.urlopen(req) as resp:
+              print(resp.status)
+          PY
