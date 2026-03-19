@@ -1,0 +1,13 @@
+from enum import Enum
+
+
+class JobStatus(str, Enum):
+    QUEUED = "QUEUED"
+    STARTED = "STARTED"
+    RUNNING = "RUNNING"
+    METRIC_UPDATE = "METRIC_UPDATE"
+    EARLY_STOPPED = "EARLY_STOPPED"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    FAILED_OOM = "FAILED_OOM"
+    FAILED_TIMEOUT = "FAILED_TIMEOUT"
