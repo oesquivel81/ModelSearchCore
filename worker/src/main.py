@@ -3,10 +3,13 @@ import logging
 from kafka import KafkaConsumer
 from dto.general_models import GeneralModels
 from controllers.health import app
+from strategy.strategy_dispatcher import StrategyDispatcher
 import uvicorn
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("WorkerMain")
+
+_dispatcher = StrategyDispatcher()
 
 KAFKA_BROKER = "localhost:9092"
 TOPIC = "topic-jobs"
@@ -16,7 +19,7 @@ def process_message(raw: str) -> None:
     model = GeneralModels.model_validate_json(raw)
     logger.info(f"[PROCESSOR] Ejecutando modelo: {model.model_id} - tipo: {model.model_type}")
     logger.info(f"[PROCESSOR] Hiperparámetros: {model.hyperparameters}")
-    # TODO: Aquí se invoca el StrategyDispatcher con el model
+    _dispatcher.dispatch(model)
 
 
 def kafka_listener():

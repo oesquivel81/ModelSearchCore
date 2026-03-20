@@ -1,0 +1,229 @@
+@startuml ModelSearchCore - Architecture
+
+!theme blueprint
+skinparam backgroundColor #0d1117
+skinparam defaultFontColor #c9d1d9
+skinparam defaultFontSize 12
+skinparam defaultFontName "Segoe UI"
+skinparam ArrowColor #58a6ff
+skinparam ArrowThickness 1.5
+skinparam NoteBackgroundColor #161b22
+skinparam NoteBorderColor #30363d
+skinparam NoteFontColor #8b949e
+
+skinparam rectangle {
+    BackgroundColor #161b22
+    BorderColor #30363d
+    FontColor #c9d1d9
+}
+
+skinparam package {
+    BackgroundColor #0d1117
+    BorderColor #58a6ff
+    FontColor #58a6ff
+    FontStyle bold
+}
+
+skinparam component {
+    BackgroundColor #21262d
+    BorderColor #58a6ff
+    FontColor #c9d1d9
+}
+
+skinparam interface {
+    BackgroundColor #1f4068
+    BorderColor #58a6ff
+    FontColor #c9d1d9
+}
+
+skinparam database {
+    BackgroundColor #21262d
+    BorderColor #f78166
+    FontColor #c9d1d9
+}
+
+skinparam queue {
+    BackgroundColor #21262d
+    BorderColor #d2a8ff
+    FontColor #c9d1d9
+}
+
+skinparam node {
+    BackgroundColor #161b22
+    BorderColor #3fb950
+    FontColor #3fb950
+    FontStyle bold
+}
+
+' ─────────────────────────────────────────────
+'  GITHUB ACTIONS
+' ─────────────────────────────────────────────
+package "GitHub Actions (CI/CD)" as CI {
+    component "pr-discord-alert.yml\n[on: pull_request]" as PrAlert #21262d
+    component "merge-discord-alert.yml\n[on: pull_request merged]" as MergeAlert #21262d
+}
+
+' Discord
+rectangle "Discord Webhook" as Discord #2d333b {
+    component "#channel-alerts" as DiscordChannel #21262d
+}
+
+PrAlert  --> DiscordChannel : POST webhook\n(PR abierto)
+MergeAlert --> DiscordChannel : POST webhook\n(merge completado)
+
+' ─────────────────────────────────────────────
+'  KAFKA MESSAGE BUS
+' ─────────────────────────────────────────────
+package "Apache Kafka (Message Bus)" as Kafka {
+    queue "topic-jobs" as TopicJobs
+    queue "topic-mlflow" as TopicMlflow
+    queue "topic-storage" as TopicStorage
+}
+
+note bottom of Kafka
+  Docker: wurstmeister/kafka:2.13-2.8.1
+  Zookeeper: zookeeper:3.9
+  Broker: localhost:9092
+end note
+
+' ─────────────────────────────────────────────
+'  ORQUESTADOR SERVICE
+' ─────────────────────────────────────────────
+package "Orquestador Service\n(FastAPI · Port 8001)" as OrqService {
+
+    package "controllers/" as OrqControllers {
+        component "health.py\nGET /health" as OrqHealth #21262d
+    }
+
+    package "dto/" as OrqDTO {
+        component "JobConfigDTO\n[model_type, hyperparameters, status]" as JobConfigDTO #21262d
+        component "ModelType\n[RF | GB | NN | SVM | LR]" as OrqModelType #21262d
+        component "JobStatus\n[QUEUED..FAILED_TIMEOUT]" as JobStatus #21262d
+    }
+
+    package "utils/" as OrqUtils {
+        component "HyperparameterQueue\n[queue.Queue[JobConfigDTO]]" as HyperQueue #21262d
+    }
+
+    package "service/" as OrqService2 {
+        component "PodDiscoveryService\n[kubernetes-client]" as PodDiscovery #21262d
+    }
+
+    component "KafkaProducer\ntopic-jobs" as OrqProducer #21262d
+
+    JobConfigDTO ..> OrqModelType : usa
+    JobConfigDTO ..> JobStatus : usa
+    HyperQueue ..> JobConfigDTO : encola/desencola
+    OrqProducer ..> HyperQueue : consume
+}
+
+' ─────────────────────────────────────────────
+'  WORKER SERVICE
+' ─────────────────────────────────────────────
+package "Worker Service\n(FastAPI · Port 8000 · CUDA)" as WorkerService {
+
+    package "controllers/" as WkControllers {
+        component "health.py\nGET /health" as WkHealth #21262d
+    }
+
+    package "dto/" as WkDTO {
+        component "GeneralModels\n[model_id, model_type,\nhyperparameters, created_at, status]" as GeneralModels #21262d
+        component "ModelType\n[RF | GB | NN | SVM | LR]" as WkModelType #21262d
+    }
+
+    component "KafkaConsumer\ntopic-jobs" as WkConsumer #21262d
+    component "main.py\n[threading: listener + uvicorn]" as WkMain #21262d
+
+    package "strategy/" as Strategy {
+
+        interface "ExecuterModel<T>\n<<ABC, Generic[T]>>\n+ execute(model)\n+ publish_to_mlflow(result)\n+ publish_to_storage(result)" as ExecuterModel #1f4068
+
+        component "StrategyDispatcher\n<<injectable>>\n+ dispatch(model)" as Dispatcher #21262d
+
+        component "RandomForestExecuter\n[scikit-learn]" as RF #21262d
+        component "GradientBoostingExecuter\n[scikit-learn]" as GB #21262d
+        component "NeuralNetworkExecuter\n[PyTorch · CUDA]" as NN #21262d
+        component "SVMExecuter\n[scikit-learn]" as SVM #21262d
+        component "LinearRegressionExecuter\n[scikit-learn]" as LR #21262d
+
+        RF ..|> ExecuterModel : implements
+        GB ..|> ExecuterModel : implements
+        NN ..|> ExecuterModel : implements
+        SVM ..|> ExecuterModel : implements
+        LR ..|> ExecuterModel : implements
+
+        Dispatcher --> ExecuterModel : resuelve por ModelType
+    }
+
+    GeneralModels ..> WkModelType : usa
+    WkMain --> WkConsumer : daemon thread
+    WkConsumer --> GeneralModels : deserializa JSON
+    WkMain --> Dispatcher : process_message()
+}
+
+' ─────────────────────────────────────────────
+'  MLFLOW SERVICE
+' ─────────────────────────────────────────────
+package "MLflow Service\n(FastAPI · Port 8002)" as MlflowService {
+
+    package "controllers/" as MlControllers {
+        component "health.py\nGET /health" as MlHealth #21262d
+    }
+
+    component "KafkaConsumer\ntopic-mlflow" as MlConsumer #21262d
+    component "MLflow Tracking\n[experiments, runs, metrics]" as MlTracking #21262d
+
+    MlConsumer --> MlTracking : registra métricas
+}
+
+' ─────────────────────────────────────────────
+'  STORAGE
+' ─────────────────────────────────────────────
+rectangle "Storage Layer" as Storage #2d333b {
+    database "MongoDB\n[modelos no-relacionales]" as Mongo
+    database "PostgreSQL\n[métricas relacionales]" as Postgres
+}
+
+' ─────────────────────────────────────────────
+'  KUBERNETES
+' ─────────────────────────────────────────────
+node "Kubernetes Cluster" as K8s {
+    component "Worker Pods\n[GPU enabled]" as WkPods
+    component "Orquestador Pod" as OrqPod
+    component "MLflow Pod" as MlPod
+}
+
+' ─────────────────────────────────────────────
+'  DOCKER COMPOSE (local dev)
+' ─────────────────────────────────────────────
+rectangle "Docker Compose (local dev)" as DockerCompose #2d333b {
+    component "zookeeper:3.9" as ZK #21262d
+    component "wurstmeister/kafka:2.13-2.8.1" as KafkaBroker #21262d
+    component "worker:8000" as DockerWorker #21262d
+    ZK --> KafkaBroker : coordina
+}
+
+' ─────────────────────────────────────────────
+'  CONNECTIONS BETWEEN SERVICES
+' ─────────────────────────────────────────────
+OrqProducer --> TopicJobs : produce JobConfigDTO
+TopicJobs --> WkConsumer : consume
+
+RF --> TopicMlflow : publish_to_mlflow()
+GB --> TopicMlflow : publish_to_mlflow()
+NN --> TopicMlflow : publish_to_mlflow()
+SVM --> TopicMlflow : publish_to_mlflow()
+LR --> TopicMlflow : publish_to_mlflow()
+
+RF --> TopicStorage : publish_to_storage()
+GB --> TopicStorage : publish_to_storage()
+NN --> TopicStorage : publish_to_storage()
+SVM --> TopicStorage : publish_to_storage()
+LR --> TopicStorage : publish_to_storage()
+
+TopicMlflow --> MlConsumer : consume
+TopicStorage --> Storage : consume → persist
+
+PodDiscovery --> K8s : list/watch pods\n[kubernetes-client]
+
+@enduml
