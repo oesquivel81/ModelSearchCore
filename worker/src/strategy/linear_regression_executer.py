@@ -28,6 +28,9 @@ class LinearRegressionExecuter(ExecuterModel[GeneralModels]):
 
         logger.info(f"[LR] Modelo inicializado: {reg}")
 
+        ##IMPLEMENTAR AQUÍ EL ENTRENAMIENTO REAL CON LOS DATOS REALES
+
+
         result = {
             "model_id": model.model_id,
             "model_type": model.model_type.value,
