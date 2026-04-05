@@ -32,3 +32,14 @@ mlflow/src/__pycache__/
 
 # Excluir archivos de entorno y configuración local
 .env*
+
+# Colab outputs y temporales
+colab/outputs/checkpoints/*
+colab/outputs/csv/*
+colab/outputs/reports/*
+colab/outputs/embeddings/*
+!colab/outputs/**/.gitkeep
+.ipynb_checkpoints/
+*.pt
+*.pth
+*.ckpt
