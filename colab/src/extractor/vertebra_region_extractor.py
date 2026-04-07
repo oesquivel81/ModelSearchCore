@@ -139,3 +139,33 @@ class VertebraRegionExtractor:
         print(f"Regiones vertebrales guardadas en: {out_csv}")
         print(f"Total vértebras guardadas: {len(out_df)}")
         return out_df
+
+
+def build_study_split(index_csv, seed=42, image_col="radiograph_path",
+                      train_size=0.70, val_size=0.15, test_size=0.15):
+    df = pd.read_csv(index_csv)
+    study_ids = df[image_col].apply(lambda p: Path(p).stem).unique().tolist()
+
+    rng = np.random.RandomState(seed)
+    rng.shuffle(study_ids)
+
+    n = len(study_ids)
+    n_train = int(n * train_size)
+    n_val = int(n * val_size)
+
+    splits = []
+    for i in range(n):
+        if i < n_train:
+            splits.append("train")
+        elif i < n_train + n_val:
+            splits.append("val")
+        else:
+            splits.append("test")
+
+    return pd.DataFrame({"study_id": study_ids, "split": splits})
+
+
+def save_study_split(split_df, path):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    split_df.to_csv(path, index=False)
+    return path
