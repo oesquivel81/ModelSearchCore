@@ -91,14 +91,14 @@ class DiscordWebhookNotifier:
         )
         self._send({"content": text})
 
-    def send_result(self, result):
+    def send_result(self, result, file_paths=None):
         title = f"✅ **{self.experiment_name}** — Entrenamiento finalizado"
 
         lines = [title, "```json"]
         lines.append(json.dumps(result, indent=2, ensure_ascii=False))
         lines.append("```")
 
-        self._send({"content": "\n".join(lines)})
+        self._send({"content": "\n".join(lines)}, file_paths=file_paths)
 
     def send_error(self, error_msg):
         text = f"❌ **{self.experiment_name}** — Error\n```\n{error_msg}\n```"

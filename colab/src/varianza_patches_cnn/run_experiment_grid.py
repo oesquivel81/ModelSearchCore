@@ -14,19 +14,33 @@ def build_experiment_batch(
     pad_xs=None,
     pad_ys=None,
     lrs=None,
+    base_channels_list=None,
+    batch_sizes=None,
+    epochs_list=None,
+    variance_ksizes=None,
+    seeds=None,
+    min_areas=None,
 ):
     model_types = model_types or ["baseline"]
     patch_sizes = patch_sizes or [(64, 64)]
     pad_xs = pad_xs or [30]
     pad_ys = pad_ys or [15]
     lrs = lrs or [1e-3]
+    base_channels_list = base_channels_list or [32]
+    batch_sizes = batch_sizes or [16]
+    epochs_list = epochs_list or [20]
+    variance_ksizes = variance_ksizes or [5]
+    seeds = seeds or [42]
+    min_areas = min_areas or [50]
 
     combos = list(itertools.product(
-        model_types, patch_sizes, pad_xs, pad_ys, lrs
+        model_types, patch_sizes, pad_xs, pad_ys, lrs,
+        base_channels_list, batch_sizes, epochs_list,
+        variance_ksizes, seeds, min_areas,
     ))
 
     batch = []
-    for idx, (model_type, (ph, pw), px, py, lr) in enumerate(combos, start=1):
+    for idx, (model_type, (ph, pw), px, py, lr, bch, bs, ep, vk, seed, ma) in enumerate(combos, start=1):
         batch.append({
             "id": idx,
             "model_type": model_type,
@@ -34,6 +48,12 @@ def build_experiment_batch(
             "pad_x": px,
             "pad_y": py,
             "lr": lr,
+            "base_channels": bch,
+            "batch_size": bs,
+            "epochs": ep,
+            "variance_ksize": vk,
+            "seed": seed,
+            "min_area": ma,
         })
     return batch
 
@@ -57,12 +77,24 @@ def run_experiment_grid(base_config: dict, experiment_batch: list) -> pd.DataFra
         px = params["pad_x"]
         py = params["pad_y"]
         lr = params["lr"]
+        bch = params.get("base_channels", 32)
+        bs = params.get("batch_size", 16)
+        ep = params.get("epochs", 20)
+        vk = params.get("variance_ksize", 5)
+        seed = params.get("seed", 42)
+        ma = params.get("min_area", 50)
 
         cfg["model"]["type"] = model_type
+        cfg["model"]["base_channels"] = bch
         cfg["data"]["patch_size"] = [ph, pw]
         cfg["extractor"]["pad_x"] = px
         cfg["extractor"]["pad_y"] = py
+        cfg["extractor"]["min_area"] = ma
         cfg["training"]["lr"] = lr
+        cfg["training"]["batch_size"] = bs
+        cfg["training"]["epochs"] = ep
+        cfg["seed"] = seed
+        cfg["variance_ksize"] = vk
 
         cfg["experiment_name"] = (
             f"{base_config.get('experiment_name', 'exp')}"
@@ -72,6 +104,11 @@ def run_experiment_grid(base_config: dict, experiment_batch: list) -> pd.DataFra
             f"__padx-{px}"
             f"__pady-{py}"
             f"__lr-{lr}"
+            f"__ch-{bch}"
+            f"__bs-{bs}"
+            f"__ep-{ep}"
+            f"__vk-{vk}"
+            f"__seed-{seed}"
         )
 
         print("=" * 120)
@@ -92,6 +129,12 @@ def run_experiment_grid(base_config: dict, experiment_batch: list) -> pd.DataFra
                 "pad_x": px,
                 "pad_y": py,
                 "lr": lr,
+                "base_channels": bch,
+                "batch_size": bs,
+                "epochs": ep,
+                "variance_ksize": vk,
+                "seed": seed,
+                "min_area": ma,
                 "num_vertebras": num_vert,
                 "best_epoch": result.get("best_epoch"),
                 "best_metric_name": result.get("best_metric_name"),
@@ -119,6 +162,12 @@ def run_experiment_grid(base_config: dict, experiment_batch: list) -> pd.DataFra
                 "pad_x": px,
                 "pad_y": py,
                 "lr": lr,
+                "base_channels": bch,
+                "batch_size": bs,
+                "epochs": ep,
+                "variance_ksize": vk,
+                "seed": seed,
+                "min_area": ma,
                 "status": "failed",
                 "error": str(e),
             }

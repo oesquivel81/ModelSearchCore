@@ -1,6 +1,7 @@
-import os
+﻿import os
 import cv2
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 
 
@@ -34,11 +35,17 @@ class VertebraComponentExtractor:
         self.components = []
         self.overlay = None
 
+    # =========================================================
+    # PIPELINE
+    # =========================================================
     def run(self):
         self._extract_components()
         self._build_overlay()
         return self
 
+    # =========================================================
+    # EXTRACCION DE COMPONENTES
+    # =========================================================
     def _extract_components(self):
         binary = (self.local_mask > 0).astype(np.uint8)
         n, labels, stats, centroids = cv2.connectedComponentsWithStats(binary, connectivity=8)
@@ -58,11 +65,13 @@ class VertebraComponentExtractor:
 
             cx, cy = centroids[i]
 
+            # padding base
             pad_x_left = self.pad_x
             pad_x_right = self.pad_x
             pad_y_top = self.pad_y
             pad_y_bottom = self.pad_y
 
+            # expansion especial en region superior
             if cy < self.top_region_ratio * h:
                 pad_x_left = int(round(self.pad_x * self.top_pad_x_scale))
                 pad_x_right = int(round(self.pad_x * self.top_pad_x_scale))
@@ -87,9 +96,13 @@ class VertebraComponentExtractor:
                 "patch_mask": patch_mask
             })
 
+        # ordenar de arriba hacia abajo
         comps = sorted(comps, key=lambda d: d["centroid_y"])
         self.components = comps
 
+    # =========================================================
+    # OVERLAY
+    # =========================================================
     def _build_overlay(self):
         out = cv2.cvtColor(self.image, cv2.COLOR_GRAY2RGB)
 
@@ -117,10 +130,13 @@ class VertebraComponentExtractor:
     def show_overlay(self, figsize=(8, 12)):
         plt.figure(figsize=figsize)
         plt.imshow(self.overlay)
-        plt.title("Componentes candidatas a vértebras")
+        plt.title("Componentes candidatas a vertebras")
         plt.axis("off")
         plt.show()
 
+    # =========================================================
+    # VISUALIZAR PATCHES EN GRILLA
+    # =========================================================
     def show_patches(self, max_patches=16, figsize=(16, 10)):
         n = min(max_patches, len(self.components))
         if n == 0:
@@ -146,6 +162,47 @@ class VertebraComponentExtractor:
         plt.tight_layout()
         plt.show()
 
+    def save_patch_grid(self, max_patches=16, figsize=(16, 10), grid_path=None):
+        """
+        Guarda una grilla visual de los patches extraidos.
+        """
+        n = min(max_patches, len(self.components))
+        if n == 0:
+            print("No hay componentes.")
+            return
+
+        cols = 4
+        rows = int(np.ceil(n / cols))
+        fig, axes = plt.subplots(rows, cols, figsize=figsize)
+        axes = np.array(axes).reshape(-1)
+
+        for i in range(n):
+            comp = self.components[i]
+            axes[i].imshow(comp["patch_img"], cmap="gray")
+            axes[i].set_title(
+                f"id={i}\ny={comp['centroid_y']:.1f} | area={comp['area']}"
+            )
+            axes[i].axis("off")
+
+        for i in range(n, len(axes)):
+            axes[i].axis("off")
+
+        plt.tight_layout()
+
+        if grid_path is None:
+            if self.save_dir is None:
+                raise ValueError("Define save_dir o grid_path.")
+            os.makedirs(self.save_dir, exist_ok=True)
+            grid_path = os.path.join(self.save_dir, "patch_grid.png")
+
+        plt.savefig(grid_path, dpi=160, bbox_inches="tight")
+        plt.close(fig)
+
+        print(f"Grilla guardada en: {grid_path}")
+
+    # =========================================================
+    # GUARDAR PATCHES INDIVIDUALES
+    # =========================================================
     def save_patches(self):
         if self.save_dir is None:
             raise ValueError("Define save_dir para guardar patches.")
@@ -163,7 +220,64 @@ class VertebraComponentExtractor:
         print(f"Guardado en: {self.save_dir}")
 
     # =========================================================
-    # MÉTRICAS ENTRE CAJAS
+    # GUARDAR PATCHES + METADATA CSV
+    # =========================================================
+    def save_patches_with_metadata(self, sample_id="sample"):
+        """
+        Guarda:
+        - patch_images/*.png
+        - patch_masks/*.png
+        - CSV con metadata
+
+        Ideal para construir dataset de CNN.
+        """
+        if self.save_dir is None:
+            raise ValueError("Define save_dir para guardar patches.")
+
+        os.makedirs(self.save_dir, exist_ok=True)
+
+        img_dir = os.path.join(self.save_dir, "patch_images")
+        mask_dir = os.path.join(self.save_dir, "patch_masks")
+        os.makedirs(img_dir, exist_ok=True)
+        os.makedirs(mask_dir, exist_ok=True)
+
+        rows = []
+
+        for i, comp in enumerate(self.components):
+            img_name = f"{sample_id}_vertebra_{i:02d}.png"
+            mask_name = f"{sample_id}_vertebra_{i:02d}_mask.png"
+
+            img_path = os.path.join(img_dir, img_name)
+            mask_path = os.path.join(mask_dir, mask_name)
+
+            cv2.imwrite(img_path, comp["patch_img"])
+            cv2.imwrite(mask_path, comp["patch_mask"])
+
+            x1, y1, x2, y2 = comp["bbox"]
+
+            rows.append({
+                "sample_id": sample_id,
+                "component_idx": i,
+                "centroid_x": comp["centroid_x"],
+                "centroid_y": comp["centroid_y"],
+                "area": comp["area"],
+                "bbox_x1": x1,
+                "bbox_y1": y1,
+                "bbox_x2": x2,
+                "bbox_y2": y2,
+                "image_patch_path": img_path,
+                "mask_patch_path": mask_path,
+            })
+
+        df = pd.DataFrame(rows)
+        csv_path = os.path.join(self.save_dir, f"{sample_id}_patch_metadata.csv")
+        df.to_csv(csv_path, index=False)
+
+        print(f"Metadata guardada en: {csv_path}")
+        return df
+
+    # =========================================================
+    # METRICAS ENTRE CAJAS
     # =========================================================
     def _bbox_area(self, bbox):
         x1, y1, x2, y2 = bbox
@@ -214,63 +328,6 @@ class VertebraComponentExtractor:
 
         return float(np.sqrt(dx * dx + dy * dy))
 
-    def _bbox_corners(self, bbox):
-        x1, y1, x2, y2 = bbox
-        return np.array([
-            [x1, y1],
-            [x2, y1],
-            [x2, y2],
-            [x1, y2]
-        ], dtype=np.float32)
-
-    def _bbox_border_points(self, bbox):
-        x1, y1, x2, y2 = bbox
-
-        pts = []
-
-        for x in range(x1, x2 + 1):
-            pts.append((x, y1))
-            pts.append((x, y2))
-
-        for y in range(y1, y2 + 1):
-            pts.append((x1, y))
-            pts.append((x2, y))
-
-        pts = np.unique(np.array(pts, dtype=np.float32), axis=0)
-        return pts
-
-    def _directed_hausdorff_points(self, A, B):
-        if len(A) == 0 or len(B) == 0:
-            return float("inf")
-
-        max_min_dist = 0.0
-        for a in A:
-            dists = np.sqrt(np.sum((B - a) ** 2, axis=1))
-            min_dist = float(np.min(dists))
-            if min_dist > max_min_dist:
-                max_min_dist = min_dist
-        return max_min_dist
-
-    def _hausdorff_points(self, A, B):
-        if len(A) == 0 and len(B) == 0:
-            return 0.0
-        if len(A) == 0 or len(B) == 0:
-            return float("inf")
-
-        dab = self._directed_hausdorff_points(A, B)
-        dba = self._directed_hausdorff_points(B, A)
-        return max(dab, dba)
-
-    def _bbox_hausdorff_corners(self, bbox1, bbox2):
-        A = self._bbox_corners(bbox1)
-        B = self._bbox_corners(bbox2)
-        return self._hausdorff_points(A, B)
-
-    def _bbox_hausdorff_border(self, bbox1, bbox2):
-        A = self._bbox_border_points(bbox1)
-        B = self._bbox_border_points(bbox2)
-        return self._hausdorff_points(A, B)
-
     def bbox_pair_metrics(self, idx1, idx2):
         comp1 = self.components[idx1]
         comp2 = self.components[idx2]
@@ -283,8 +340,6 @@ class VertebraComponentExtractor:
         union_area = self._bbox_union_area(bbox1, bbox2)
         iou = self._bbox_iou(bbox1, bbox2)
         min_dist = self._bbox_min_distance(bbox1, bbox2)
-        h_corners = self._bbox_hausdorff_corners(bbox1, bbox2)
-        h_border = self._bbox_hausdorff_border(bbox1, bbox2)
 
         cx1, cy1 = comp1["centroid_x"], comp1["centroid_y"]
         cx2, cy2 = comp2["centroid_x"], comp2["centroid_y"]
@@ -307,8 +362,6 @@ class VertebraComponentExtractor:
             "centroid_distance": float(centroid_dist),
             "delta_x_centroid": float(delta_x),
             "delta_y_centroid": float(delta_y),
-            "hausdorff_corners": float(h_corners),
-            "hausdorff_border": float(h_border),
         }
 
     def all_bbox_pair_metrics(self, only_consecutive=False):
@@ -325,33 +378,13 @@ class VertebraComponentExtractor:
 
         return results
 
-    def find_overlapping_or_close_pairs(
-        self,
-        iou_threshold=0.05,
-        min_distance_threshold=15.0,
-        hausdorff_border_threshold=25.0,
-        only_consecutive=True
-    ):
-        pairs = self.all_bbox_pair_metrics(only_consecutive=only_consecutive)
-
-        selected = []
-        for m in pairs:
-            if (
-                m["iou"] > iou_threshold
-                or m["min_distance"] < min_distance_threshold
-                or m["hausdorff_border"] < hausdorff_border_threshold
-            ):
-                selected.append(m)
-
-        return selected
-
     def print_pair_metrics(self, only_consecutive=True, max_rows=50):
         pairs = self.all_bbox_pair_metrics(only_consecutive=only_consecutive)
 
         print("-" * 120)
         print(
             f"{'i':>3} {'j':>3} | {'IoU':>8} | {'min_dist':>9} | "
-            f"{'cent_dist':>10} | {'dY':>8} | {'HausB':>8} | {'overlap':>8}"
+            f"{'cent_dist':>10} | {'dY':>8} | {'overlap':>8}"
         )
         print("-" * 120)
 
@@ -362,12 +395,12 @@ class VertebraComponentExtractor:
                 f"{m['min_distance']:>9.2f} | "
                 f"{m['centroid_distance']:>10.2f} | "
                 f"{m['delta_y_centroid']:>8.2f} | "
-                f"{m['hausdorff_border']:>8.2f} | "
                 f"{str(m['overlap']):>8}"
             )
 
     # =========================================================
-    # BBOX AJUSTADA + COMPARACIÓN CON BBOX CONTEXTO
+    # BBOX AJUSTADA + COMPARACION CON BBOX CONTEXTO
+    # (usado por vertebra_region_batch / vertebra_region_proxy)
     # =========================================================
     def _component_tight_bbox_from_patch_mask(self, patch_mask):
         ys, xs = np.where(patch_mask > 0)
@@ -446,8 +479,6 @@ class VertebraComponentExtractor:
         union_area = self._bbox_union_area(bbox1, bbox2)
         iou = self._bbox_iou(bbox1, bbox2)
         min_dist = self._bbox_min_distance(bbox1, bbox2)
-        h_corners = self._bbox_hausdorff_corners(bbox1, bbox2)
-        h_border = self._bbox_hausdorff_border(bbox1, bbox2)
 
         cx1, cy1 = comp1["centroid_x"], comp1["centroid_y"]
         cx2, cy2 = comp2["centroid_x"], comp2["centroid_y"]
@@ -471,82 +502,10 @@ class VertebraComponentExtractor:
             "centroid_distance": float(centroid_dist),
             "delta_x_centroid": float(delta_x),
             "delta_y_centroid": float(delta_y),
-            "hausdorff_corners": float(h_corners),
-            "hausdorff_border": float(h_border),
         }
 
-    def compare_context_vs_tight_pairs(self, only_consecutive=True, max_rows=30):
-        n = len(self.components)
-
-        if only_consecutive:
-            pairs = [(i, i + 1) for i in range(n - 1)]
-        else:
-            pairs = [(i, j) for i in range(n) for j in range(i + 1, n)]
-
-        print("-" * 150)
-        print(
-            f"{'i':>3} {'j':>3} | "
-            f"{'IoU_ctx':>8} {'IoU_tight':>10} | "
-            f"{'dmin_ctx':>9} {'dmin_tight':>11} | "
-            f"{'Haus_ctx':>9} {'Haus_tight':>11} | "
-            f"{'ov_ctx':>7} {'ov_tight':>9}"
-        )
-        print("-" * 150)
-
-        for k, (i, j) in enumerate(pairs[:max_rows]):
-            m_ctx = self.bbox_pair_metrics_mode(i, j, mode="context")
-            m_tight = self.bbox_pair_metrics_mode(i, j, mode="tight")
-
-            print(
-                f"{i:>3} {j:>3} | "
-                f"{m_ctx['iou']:>8.4f} {m_tight['iou']:>10.4f} | "
-                f"{m_ctx['min_distance']:>9.2f} {m_tight['min_distance']:>11.2f} | "
-                f"{m_ctx['hausdorff_border']:>9.2f} {m_tight['hausdorff_border']:>11.2f} | "
-                f"{str(m_ctx['overlap']):>7} {str(m_tight['overlap']):>9}"
-            )
-
-    def build_overlay_dual(self):
-        out = cv2.cvtColor(self.image, cv2.COLOR_GRAY2RGB)
-
-        for idx, comp in enumerate(self.components):
-            bbox_context = comp.get("bbox_context", comp["bbox"])
-            bbox_tight = comp.get("bbox_tight", comp["bbox"])
-
-            x1, y1, x2, y2 = bbox_context
-            cv2.rectangle(out, (x1, y1), (x2, y2), (255, 80, 80), 2)
-
-            tx1, ty1, tx2, ty2 = bbox_tight
-            cv2.rectangle(out, (tx1, ty1), (tx2, ty2), (80, 255, 255), 2)
-
-            cx = int(round(comp["centroid_x"]))
-            cy = int(round(comp["centroid_y"]))
-            cv2.circle(out, (cx, cy), 3, (255, 255, 0), -1)
-
-            cv2.putText(
-                out,
-                str(idx),
-                (x1, max(15, y1 - 5)),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.55,
-                (0, 255, 0),
-                2,
-                cv2.LINE_AA
-            )
-
-        self.overlay_dual = out
-
-    def show_overlay_dual(self, figsize=(8, 12)):
-        if not hasattr(self, "overlay_dual"):
-            self.build_overlay_dual()
-
-        plt.figure(figsize=figsize)
-        plt.imshow(self.overlay_dual)
-        plt.title("Rojo = context | Cian = tight")
-        plt.axis("off")
-        plt.show()
-
     # =========================================================
-    # MÉTRICAS POR COMPONENTE
+    # METRICAS POR COMPONENTE
     # =========================================================
     def component_metrics(self, idx, mode="context"):
         comp = self.components[idx]
@@ -585,30 +544,9 @@ class VertebraComponentExtractor:
     def all_component_metrics(self, mode="context"):
         return [self.component_metrics(i, mode=mode) for i in range(len(self.components))]
 
-    def print_component_metrics(self, mode="context", max_rows=50):
-        rows = self.all_component_metrics(mode=mode)
-
-        print("-" * 120)
-        print(
-            f"{'i':>3} | {'area':>8} | {'bbox_area':>10} | "
-            f"{'w':>5} | {'h':>5} | {'aspect':>8} | {'occup':>8} | {'cy':>8}"
-        )
-        print("-" * 120)
-
-        for r in rows[:max_rows]:
-            print(
-                f"{r['idx']:>3} | "
-                f"{r['component_area']:>8} | "
-                f"{r['bbox_area']:>10} | "
-                f"{r['width']:>5} | "
-                f"{r['height']:>5} | "
-                f"{r['aspect_ratio']:>8.3f} | "
-                f"{r['occupancy']:>8.3f} | "
-                f"{r['centroid_y']:>8.2f}"
-            )
-
     # =========================================================
     # CLASIFICAR COMPONENTES: "good", "doubtful", "bad"
+    # (usado por vertebra_region_proxy)
     # =========================================================
     def classify_component_quality(
         self,
@@ -640,7 +578,6 @@ class VertebraComponentExtractor:
         reasons = []
         score = 0
 
-        # 1) Área
         if component_area < area_min:
             reasons.append(f"area<{area_min}")
             score -= 2
@@ -649,7 +586,6 @@ class VertebraComponentExtractor:
         else:
             score += 1
 
-        # 2) Occupancy
         if occupancy < occupancy_min:
             reasons.append(f"occupancy<{occupancy_min}")
             score -= 2
@@ -658,7 +594,6 @@ class VertebraComponentExtractor:
         else:
             score += 1
 
-        # 3) Aspect ratio
         if aspect < aspect_min or aspect > aspect_max:
             reasons.append(f"aspect_outside_[{aspect_min},{aspect_max}]")
             score -= 2
@@ -667,7 +602,6 @@ class VertebraComponentExtractor:
         else:
             score += 1
 
-        # 4) Zonas extremas superior/inferior
         y_margin = y_margin_ratio * h
         if cy < y_margin:
             reasons.append("too_high_in_image")
@@ -676,9 +610,7 @@ class VertebraComponentExtractor:
             reasons.append("too_low_in_image")
             score -= 1
 
-        # 5) IoU con vecinos
         neighbor_ious = []
-
         if use_neighbor_iou and n > 1:
             if idx - 1 >= 0:
                 m_prev = self.bbox_pair_metrics_mode(idx - 1, idx, mode=mode)
@@ -696,7 +628,6 @@ class VertebraComponentExtractor:
             elif max_neighbor_iou <= max_neighbor_iou_good:
                 score += 1
 
-        # Decisión final
         if score >= 5:
             label = "good"
         elif score >= 1:
@@ -754,6 +685,28 @@ class VertebraComponentExtractor:
             results.append(r)
         return results
 
+    def print_component_metrics(self, mode="context", max_rows=50):
+        rows = self.all_component_metrics(mode=mode)
+
+        print("-" * 120)
+        print(
+            f"{'i':>3} | {'area':>8} | {'bbox_area':>10} | "
+            f"{'w':>5} | {'h':>5} | {'aspect':>8} | {'occup':>8} | {'cy':>8}"
+        )
+        print("-" * 120)
+
+        for r in rows[:max_rows]:
+            print(
+                f"{r['idx']:>3} | "
+                f"{r['component_area']:>8} | "
+                f"{r['bbox_area']:>10} | "
+                f"{r['width']:>5} | "
+                f"{r['height']:>5} | "
+                f"{r['aspect_ratio']:>8.3f} | "
+                f"{r['occupancy']:>8.3f} | "
+                f"{r['centroid_y']:>8.2f}"
+            )
+
     def print_component_quality(
         self,
         mode="tight",
@@ -808,6 +761,163 @@ class VertebraComponentExtractor:
                 f"{', '.join(r['reasons']) if r['reasons'] else '-'}"
             )
 
+    # =========================================================
+    # HAUSDORFF ENTRE CAJAS
+    # =========================================================
+    def _bbox_corners(self, bbox):
+        x1, y1, x2, y2 = bbox
+        return np.array([
+            [x1, y1],
+            [x2, y1],
+            [x2, y2],
+            [x1, y2]
+        ], dtype=np.float32)
+
+    def _bbox_border_points(self, bbox):
+        x1, y1, x2, y2 = bbox
+
+        pts = []
+
+        for x in range(x1, x2 + 1):
+            pts.append((x, y1))
+            pts.append((x, y2))
+
+        for y in range(y1, y2 + 1):
+            pts.append((x1, y))
+            pts.append((x2, y))
+
+        pts = np.unique(np.array(pts, dtype=np.float32), axis=0)
+        return pts
+
+    def _directed_hausdorff_points(self, A, B):
+        if len(A) == 0 or len(B) == 0:
+            return float("inf")
+
+        max_min_dist = 0.0
+        for a in A:
+            dists = np.sqrt(np.sum((B - a) ** 2, axis=1))
+            min_dist = float(np.min(dists))
+            if min_dist > max_min_dist:
+                max_min_dist = min_dist
+        return max_min_dist
+
+    def _hausdorff_points(self, A, B):
+        if len(A) == 0 and len(B) == 0:
+            return 0.0
+        if len(A) == 0 or len(B) == 0:
+            return float("inf")
+
+        dab = self._directed_hausdorff_points(A, B)
+        dba = self._directed_hausdorff_points(B, A)
+        return max(dab, dba)
+
+    def _bbox_hausdorff_corners(self, bbox1, bbox2):
+        A = self._bbox_corners(bbox1)
+        B = self._bbox_corners(bbox2)
+        return self._hausdorff_points(A, B)
+
+    def _bbox_hausdorff_border(self, bbox1, bbox2):
+        A = self._bbox_border_points(bbox1)
+        B = self._bbox_border_points(bbox2)
+        return self._hausdorff_points(A, B)
+
+    def find_overlapping_or_close_pairs(
+        self,
+        iou_threshold=0.05,
+        min_distance_threshold=15.0,
+        hausdorff_border_threshold=25.0,
+        only_consecutive=True
+    ):
+        pairs = self.all_bbox_pair_metrics(only_consecutive=only_consecutive)
+
+        selected = []
+        for m in pairs:
+            if (
+                m["iou"] > iou_threshold
+                or m["min_distance"] < min_distance_threshold
+                or m.get("hausdorff_border", float("inf")) < hausdorff_border_threshold
+            ):
+                selected.append(m)
+
+        return selected
+
+    # =========================================================
+    # COMPARACION CONTEXT VS TIGHT
+    # =========================================================
+    def compare_context_vs_tight_pairs(self, only_consecutive=True, max_rows=30):
+        n = len(self.components)
+
+        if only_consecutive:
+            pairs = [(i, i + 1) for i in range(n - 1)]
+        else:
+            pairs = [(i, j) for i in range(n) for j in range(i + 1, n)]
+
+        print("-" * 150)
+        print(
+            f"{'i':>3} {'j':>3} | "
+            f"{'IoU_ctx':>8} {'IoU_tight':>10} | "
+            f"{'dmin_ctx':>9} {'dmin_tight':>11} | "
+            f"{'ov_ctx':>7} {'ov_tight':>9}"
+        )
+        print("-" * 150)
+
+        for k, (i, j) in enumerate(pairs[:max_rows]):
+            m_ctx = self.bbox_pair_metrics_mode(i, j, mode="context")
+            m_tight = self.bbox_pair_metrics_mode(i, j, mode="tight")
+
+            print(
+                f"{i:>3} {j:>3} | "
+                f"{m_ctx['iou']:>8.4f} {m_tight['iou']:>10.4f} | "
+                f"{m_ctx['min_distance']:>9.2f} {m_tight['min_distance']:>11.2f} | "
+                f"{str(m_ctx['overlap']):>7} {str(m_tight['overlap']):>9}"
+            )
+
+    # =========================================================
+    # OVERLAY DUAL (context + tight)
+    # =========================================================
+    def build_overlay_dual(self):
+        out = cv2.cvtColor(self.image, cv2.COLOR_GRAY2RGB)
+
+        for idx, comp in enumerate(self.components):
+            bbox_context = comp.get("bbox_context", comp["bbox"])
+            bbox_tight = comp.get("bbox_tight", comp["bbox"])
+
+            x1, y1, x2, y2 = bbox_context
+            cv2.rectangle(out, (x1, y1), (x2, y2), (255, 80, 80), 2)
+
+            tx1, ty1, tx2, ty2 = bbox_tight
+            cv2.rectangle(out, (tx1, ty1), (tx2, ty2), (80, 255, 255), 2)
+
+            cx = int(round(comp["centroid_x"]))
+            cy = int(round(comp["centroid_y"]))
+            cv2.circle(out, (cx, cy), 3, (255, 255, 0), -1)
+
+            cv2.putText(
+                out,
+                str(idx),
+                (x1, max(15, y1 - 5)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.55,
+                (0, 255, 0),
+                2,
+                cv2.LINE_AA
+            )
+
+        self.overlay_dual = out
+
+    def show_overlay_dual(self, figsize=(8, 12)):
+        if not hasattr(self, "overlay_dual"):
+            self.build_overlay_dual()
+
+        plt.figure(figsize=figsize)
+        plt.imshow(self.overlay_dual)
+        plt.title("Rojo = context | Cian = tight")
+        plt.axis("off")
+        plt.show()
+
+    # =========================================================
+    # QUALITY OVERLAY
+    # =========================================================
     def build_quality_overlay(
         self,
         mode="tight",
@@ -890,6 +1000,9 @@ class VertebraComponentExtractor:
         plt.axis("off")
         plt.show()
 
+    # =========================================================
+    # FILTRO: INDICES BUENOS
+    # =========================================================
     def get_good_component_indices(
         self,
         mode="tight",
@@ -922,3 +1035,65 @@ class VertebraComponentExtractor:
             max_neighbor_iou_bad=max_neighbor_iou_bad
         )
         return [r["idx"] for r in rows if r["label"] == "good"]
+
+    # =========================================================
+    # BLOB -> IMAGEN AISLADA
+    # =========================================================
+    def get_blob_image(self, idx, background=0):
+        """Imagen del blob aislado: solo los pixeles de ese componente."""
+        comp = self.components[idx]
+        patch_img = comp["patch_img"]
+        patch_mask = comp["patch_mask"]
+        blob = (patch_mask > 0).astype(np.uint8)
+        out = np.full_like(patch_img, background)
+        out[blob == 1] = patch_img[blob == 1]
+        return out
+
+    def get_blob_images(self, background=0):
+        """Lista de imagenes aisladas para todos los blobs."""
+        return [self.get_blob_image(i, background=background)
+                for i in range(len(self.components))]
+
+    def save_blob_images(self, output_dir=None, background=0):
+        """Guarda cada blob como imagen PNG aislada."""
+        out_dir = output_dir or self.save_dir
+        if out_dir is None:
+            raise ValueError("Define output_dir o save_dir.")
+        os.makedirs(out_dir, exist_ok=True)
+
+        paths = []
+        for i in range(len(self.components)):
+            blob_img = self.get_blob_image(i, background=background)
+            path = os.path.join(out_dir, f"blob_{i:02d}.png")
+            cv2.imwrite(path, blob_img)
+            paths.append(path)
+
+        print(f"{len(paths)} blobs guardados en: {out_dir}")
+        return paths
+
+    def show_blob_images(self, max_blobs=16, background=0, figsize=(16, 10)):
+        """Muestra los blobs aislados en un grid de matplotlib."""
+        n = min(max_blobs, len(self.components))
+        if n == 0:
+            print("No hay componentes.")
+            return
+
+        cols = 4
+        rows = int(np.ceil(n / cols))
+        fig, axes = plt.subplots(rows, cols, figsize=figsize)
+        axes = np.array(axes).reshape(-1)
+
+        for i in range(n):
+            blob_img = self.get_blob_image(i, background=background)
+            comp = self.components[i]
+            axes[i].imshow(blob_img, cmap="gray")
+            axes[i].set_title(
+                f"blob {i}\ny={comp['centroid_y']:.1f} | area={comp['area']}"
+            )
+            axes[i].axis("off")
+
+        for i in range(n, len(axes)):
+            axes[i].axis("off")
+
+        plt.tight_layout()
+        plt.show()

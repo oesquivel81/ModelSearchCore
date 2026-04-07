@@ -51,6 +51,7 @@ class VertebraRegionBatch:
         # quality filter
         mode="tight",
         include_labels=None,
+        save_dir=None,
         **quality_kwargs
     ):
         self.image_paths = image_paths
@@ -78,6 +79,7 @@ class VertebraRegionBatch:
 
         self.mode = mode
         self.include_labels = include_labels or ["good"]
+        self.save_dir = save_dir
         self.quality_kwargs = quality_kwargs
 
         self.by_image = {}
@@ -101,6 +103,10 @@ class VertebraRegionBatch:
                     self._failed.append((name, "imread returned None"))
                     continue
 
+                ext_save_dir = None
+                if self.save_dir is not None:
+                    ext_save_dir = os.path.join(self.save_dir, name)
+
                 extractor = VertebraComponentExtractor(
                     image=image,
                     local_mask=mask,
@@ -111,6 +117,7 @@ class VertebraRegionBatch:
                     top_pad_x_scale=self.top_pad_x_scale,
                     top_pad_y_top_scale=self.top_pad_y_top_scale,
                     top_pad_y_bottom_scale=self.top_pad_y_bottom_scale,
+                    save_dir=ext_save_dir,
                 ).run()
 
                 extractor.build_adjusted_bboxes(

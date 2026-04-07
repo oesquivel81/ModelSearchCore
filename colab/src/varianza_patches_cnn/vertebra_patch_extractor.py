@@ -57,6 +57,7 @@ class VertebraPatchExtractor:
         self.pad_y = pad_y
         self.include_labels = include_labels or ["good", "doubtful", "bad"]
         self.save_root = save_root
+        self.components = []
 
     def _read_gray(self, rel_path: str) -> np.ndarray:
         full = os.path.join(self.base_dir, rel_path)
@@ -146,6 +147,7 @@ class VertebraPatchExtractor:
                 sample_id = os.path.splitext(os.path.basename(rel_img))[0]
 
                 comps = self._extract_components(image=image, mask=mask)
+                self.components.extend(comps)
 
                 for comp in comps:
                     quality = self._classify_quality(comp)
@@ -191,3 +193,92 @@ class VertebraPatchExtractor:
         print(f"Patch metadata guardado en: {out_csv}")
         print(f"Total patches guardados: {len(out_df)}")
         return out_df
+
+    def save_patch_grid(self, max_patches=16, figsize=(16, 10), grid_path=None):
+        """
+        Guarda una grilla visual como la imagen que mostraste.
+        """
+        import matplotlib.pyplot as plt
+
+        n = min(max_patches, len(self.components))
+        if n == 0:
+            print("No hay componentes.")
+            return
+
+        cols = 4
+        rows = int(np.ceil(n / cols))
+        fig, axes = plt.subplots(rows, cols, figsize=figsize)
+        axes = np.array(axes).reshape(-1)
+
+        for i in range(n):
+            comp = self.components[i]
+            axes[i].imshow(comp["patch_img"], cmap="gray")
+            axes[i].set_title(
+                f"id={i}\ny={comp['centroid_y']:.1f} | area={comp['area']}"
+            )
+            axes[i].axis("off")
+
+        for i in range(n, len(axes)):
+            axes[i].axis("off")
+
+        plt.tight_layout()
+
+        if grid_path is None:
+            if self.save_root is None:
+                raise ValueError("Define save_root o grid_path.")
+            os.makedirs(self.save_root, exist_ok=True)
+            grid_path = os.path.join(self.save_root, "patch_grid.png")
+
+        plt.savefig(grid_path, dpi=160, bbox_inches="tight")
+        plt.close(fig)
+
+        print(f"Grilla guardada en: {grid_path}")
+
+    def save_patches_with_metadata(self, sample_id="sample"):
+        """
+        Guarda patches, máscaras y metadata CSV para luego construir dataset.
+        """
+        if self.save_root is None:
+            raise ValueError("Define save_root para guardar patches.")
+
+        os.makedirs(self.save_root, exist_ok=True)
+
+        img_dir = os.path.join(self.save_root, "patch_images")
+        mask_dir = os.path.join(self.save_root, "patch_masks")
+        os.makedirs(img_dir, exist_ok=True)
+        os.makedirs(mask_dir, exist_ok=True)
+
+        rows = []
+
+        for i, comp in enumerate(self.components):
+            img_name = f"{sample_id}_vertebra_{i:02d}.png"
+            mask_name = f"{sample_id}_vertebra_{i:02d}_mask.png"
+
+            img_path = os.path.join(img_dir, img_name)
+            mask_path = os.path.join(mask_dir, mask_name)
+
+            cv2.imwrite(img_path, comp["patch_img"])
+            cv2.imwrite(mask_path, comp["patch_mask"])
+
+            x1, y1, x2, y2 = comp["bbox"]
+
+            rows.append({
+                "sample_id": sample_id,
+                "component_idx": i,
+                "centroid_x": comp["centroid_x"],
+                "centroid_y": comp["centroid_y"],
+                "area": comp["area"],
+                "bbox_x1": x1,
+                "bbox_y1": y1,
+                "bbox_x2": x2,
+                "bbox_y2": y2,
+                "image_patch_path": img_path,
+                "mask_patch_path": mask_path,
+            })
+
+        df = pd.DataFrame(rows)
+        csv_path = os.path.join(self.save_root, f"{sample_id}_patch_metadata.csv")
+        df.to_csv(csv_path, index=False)
+
+        print(f"Metadata guardada en: {csv_path}")
+        return df
