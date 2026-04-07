@@ -1,5 +1,6 @@
 import copy
 import itertools
+import time
 import traceback
 import os
 import pandas as pd
@@ -137,6 +138,15 @@ def _apply_params_to_config(base_config, params):
 def run_orchestrator_grid(base_config: dict, experiment_batch: list) -> pd.DataFrame:
     all_results = []
     total = len(experiment_batch)
+    grid_t0 = time.time()
+
+    def _grid_log(msg):
+        elapsed = time.time() - grid_t0
+        m, s = divmod(int(elapsed), 60)
+        h, m = divmod(m, 60)
+        print(f"[{h:02d}:{m:02d}:{s:02d}] [GRID] {msg}", flush=True)
+
+    _grid_log(f"Iniciando grid con {total} experimentos")
 
     webhook_url = base_config.get("discord", {}).get("webhook_url", "")
     notifier = None
@@ -148,13 +158,15 @@ def run_orchestrator_grid(base_config: dict, experiment_batch: list) -> pd.DataF
         cfg = _apply_params_to_config(base_config, params)
         exp_id = params["id"]
 
-        print("=" * 120)
-        print(f"[{i}/{total}] ID={exp_id}  {cfg['experiment_name']}")
-        print("=" * 120)
+        _grid_log("=" * 80)
+        _grid_log(f"Experimento [{i}/{total}] ID={exp_id}  {cfg['experiment_name']}")
+        _grid_log("=" * 80)
+        exp_t0 = time.time()
 
         try:
             orch = VertebraCNNOrchestrator(cfg)
             result = orch.fit()
+            exp_min = (time.time() - exp_t0) / 60
 
             row = {
                 "id": exp_id,
@@ -186,8 +198,9 @@ def run_orchestrator_grid(base_config: dict, experiment_batch: list) -> pd.DataF
             }
             all_results.append(row)
 
-            print(
-                f"  ID={exp_id}  subpatches={row['num_subpatches']}  "
+            _grid_log(
+                f"\u2705 ID={exp_id}  {exp_min:.1f} min | "
+                f"subpatches={row['num_subpatches']}  "
                 f"val_{row['best_metric_name']}={row['best_metric_value']:.4f}  "
                 f"test_acc={row['test_acc']:.4f}  test_f1={row['test_f1_macro']:.4f}"
             )
@@ -196,7 +209,8 @@ def run_orchestrator_grid(base_config: dict, experiment_batch: list) -> pd.DataF
                 notifier.send_grid_row(row)
 
         except Exception as e:
-            print(f"  ERROR: {e}")
+            exp_min = (time.time() - exp_t0) / 60
+            _grid_log(f"\u274c ID={exp_id}  {exp_min:.1f} min | ERROR: {e}")
             traceback.print_exc()
             row = {
                 "id": exp_id,
@@ -228,8 +242,9 @@ def run_orchestrator_grid(base_config: dict, experiment_batch: list) -> pd.DataF
 
     ok = sum(1 for r in all_results if r.get("status") == "completed")
     fail = total - ok
-    print(f"\nResumen guardado en: {results_csv}")
-    print(f"Total: {total} | OK: {ok} | FAIL: {fail}")
+    total_min = (time.time() - grid_t0) / 60
+    _grid_log(f"Grid finalizado en {total_min:.1f} min | OK: {ok}/{total} | FAIL: {fail}")
+    _grid_log(f"CSV: {results_csv}")
 
     if notifier:
         notifier.send_grid_summary(results_df, results_csv)

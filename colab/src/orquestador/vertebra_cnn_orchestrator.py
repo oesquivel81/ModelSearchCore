@@ -1,6 +1,7 @@
 # src/orquestador/vertebra_cnn_orchestrator.py
 
 import os
+import time
 import traceback
 import pandas as pd
 import torch
@@ -41,7 +42,14 @@ class VertebraCNNOrchestrator:
       split -> regiones vertebrales -> subpatches -> builder varianza -> dataset -> CNN -> métricas -> Discord
     """
 
+    def _log(self, msg):
+        elapsed = time.time() - self._t0
+        m, s = divmod(int(elapsed), 60)
+        h, m = divmod(m, 60)
+        print(f"[{h:02d}:{m:02d}:{s:02d}] [{self.experiment_name}] {msg}", flush=True)
+
     def __init__(self, cfg: dict):
+        self._t0 = time.time()
         self.cfg = cfg
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -69,11 +77,13 @@ class VertebraCNNOrchestrator:
             webhook_url=discord_cfg.get("webhook_url"),
             experiment_name=self.experiment_name
         )
+        self._log(f"Inicializado | device={self.device} | output={self.output_dir}")
 
     # =========================================================
     # PREPARACIÓN
     # =========================================================
     def run_split(self):
+        self._log("Split: generando partición train/val/test...")
         split_cfg = self.cfg.get("split", {})
         extractor_cfg = self.cfg["extractor"]
 
@@ -86,9 +96,12 @@ class VertebraCNNOrchestrator:
             test_size=split_cfg.get("test_size", 0.15),
         )
         save_study_split(split_df, self.split_csv)
+        counts = split_df["split"].value_counts().to_dict()
+        self._log(f"Split completado: {counts}")
         return split_df
 
     def run_vertebra_extraction(self):
+        self._log("Extracción: extrayendo regiones vertebrales...")
         extractor_cfg = self.cfg["extractor"]
 
         extractor = VertebraRegionExtractor(
@@ -101,12 +114,15 @@ class VertebraCNNOrchestrator:
             save_root=self.vertebra_root,
         )
 
-        return extractor.extract_all(
+        vertebra_df = extractor.extract_all(
             index_csv=extractor_cfg["index_csv"],
             split_csv=self.split_csv,
         )
+        self._log(f"Extracción completada: {len(vertebra_df)} regiones vertebrales")
+        return vertebra_df
 
     def run_subpatch_generation(self):
+        self._log("Subpatches: generando parches...")
         data_cfg = self.cfg["data"]
         sub_cfg = self.cfg.get("subpatches", {})
 
@@ -117,9 +133,14 @@ class VertebraCNNOrchestrator:
             save_root=self.subpatch_root,
         )
 
-        return subpatcher.generate_all(self.vertebra_csv)
+        subpatch_df = subpatcher.generate_all(self.vertebra_csv)
+        self._log(f"Subpatches completados: {len(subpatch_df)} subpatches")
+        return subpatch_df
 
     def prepare(self):
+        self._log("═" * 50)
+        self._log("FASE 1: PREPARACIÓN DE DATOS")
+        self._log("═" * 50)
         split_df = self.run_split()
         vertebra_df = self.run_vertebra_extraction()
         subpatch_df = self.run_subpatch_generation()
@@ -161,6 +182,7 @@ class VertebraCNNOrchestrator:
         return pd.read_csv(self.subpatch_csv)
 
     def build_datasets(self):
+        self._log("Construyendo datasets (train/val/test)...")
         subpatch_df = self.load_subpatch_metadata()
         builder = self.build_variance_builder()
 
@@ -188,6 +210,7 @@ class VertebraCNNOrchestrator:
             model_type=model_type,
             num_classes=num_classes,
         )
+        self._log(f"Datasets: train={len(train_ds)} | val={len(val_ds)} | test={len(test_ds)}")
         return train_ds, val_ds, test_ds
 
     def build_dataloaders(self):
@@ -232,7 +255,10 @@ class VertebraCNNOrchestrator:
         else:
             raise ValueError(f"model_type no soportado: {model_type}")
 
-        return model.to(self.device)
+        model = model.to(self.device)
+        n_params = sum(p.numel() for p in model.parameters())
+        self._log(f"Modelo: {model_type} | params={n_params:,} | base_ch={base_channels} | classes={num_classes}")
+        return model
 
     # =========================================================
     # FORWARD DE BATCH
@@ -323,6 +349,10 @@ class VertebraCNNOrchestrator:
     def fit(self):
         try:
             prep_summary = self.prepare()
+
+            self._log("═" * 50)
+            self._log("FASE 2: CONSTRUCCIÓN DEL MODELO")
+            self._log("═" * 50)
             train_loader, val_loader, test_loader = self.build_dataloaders()
             model = self.build_model()
 
@@ -343,9 +373,15 @@ class VertebraCNNOrchestrator:
 
             total_epochs = tr_cfg.get("epochs", 20)
 
+            self._log("═" * 50)
+            self._log(f"FASE 3: ENTRENAMIENTO ({total_epochs} épocas)")
+            self._log("═" * 50)
+
             for epoch in range(total_epochs):
+                ep_start = time.time()
                 tr_metrics = self.train_one_epoch(model, train_loader, optimizer, criterion)
                 va_metrics = self.eval_one_epoch(model, val_loader, criterion)
+                ep_sec = time.time() - ep_start
 
                 row = {
                     "epoch": epoch + 1,
@@ -365,11 +401,20 @@ class VertebraCNNOrchestrator:
                 append_jsonl(self.history_jsonl, row)
 
                 current_val_metric = row[f"val_{best_metric_name}"]
-                if current_val_metric > best_metric_value:
+                is_best = current_val_metric > best_metric_value
+                if is_best:
                     best_metric_value = current_val_metric
                     best_epoch = epoch + 1
                     torch.save(model.state_dict(), self.best_model_path)
                     self.notifier.send_best_update(best_epoch, best_metric_name, best_metric_value)
+
+                star = " ★ BEST" if is_best else ""
+                self._log(
+                    f"Época {epoch+1:>3}/{total_epochs} | "
+                    f"train_loss={tr_metrics['loss']:.4f}  val_loss={va_metrics['loss']:.4f} | "
+                    f"val_acc={va_metrics['acc']:.4f}  val_f1={va_metrics['f1_macro']:.4f} | "
+                    f"{ep_sec:.1f}s{star}"
+                )
 
                 notify_every = self.cfg.get("discord", {}).get("notify_every_n_epochs", 1)
                 if ((epoch + 1) % notify_every) == 0:
@@ -383,8 +428,15 @@ class VertebraCNNOrchestrator:
             hist_df = pd.DataFrame(history_rows)
             hist_df.to_csv(self.history_csv, index=False)
 
+            self._log("═" * 50)
+            self._log("FASE 4: EVALUACIÓN EN TEST")
+            self._log("═" * 50)
             model.load_state_dict(torch.load(self.best_model_path, map_location=self.device))
             test_metrics = self.eval_one_epoch(model, test_loader, criterion)
+            self._log(
+                f"Test: acc={test_metrics['acc']:.4f}  f1={test_metrics['f1_macro']:.4f}  "
+                f"loss={test_metrics['loss']:.4f} (best_epoch={best_epoch})"
+            )
 
             result = {
                 "status": "completed",
@@ -403,9 +455,12 @@ class VertebraCNNOrchestrator:
             save_json(self.result_json, result)
             self.notifier.send_result(result)
 
+            total_min = (time.time() - self._t0) / 60
+            self._log(f"✅ Experimento completado en {total_min:.1f} min")
             return result
 
         except Exception as e:
+            self._log(f"❌ ERROR: {e}")
             err = traceback.format_exc()
             self.notifier.send_error(err)
             raise
