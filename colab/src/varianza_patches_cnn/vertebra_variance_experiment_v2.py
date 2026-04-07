@@ -29,13 +29,13 @@ class VertebraVarianceExperimentV2:
         self.extractor = VertebraPatchExtractor(
             base_dir=cfg["extractor"]["base_dir"],
             index_csv=cfg["extractor"]["index_csv"],
-            image_col=cfg["extractor"]["image_col"],
-            mask_col=cfg["extractor"]["mask_col"],
-            min_area=cfg["extractor"]["min_area"],
-            pad_x=cfg["extractor"]["pad_x"],
-            pad_y=cfg["extractor"]["pad_y"],
+            image_col=cfg["extractor"].get("image_col", "radiograph_path"),
+            mask_col=cfg["extractor"].get("mask_col", "label_binary_path"),
+            split_col=cfg["extractor"].get("split_col", "split"),
+            min_area=cfg["extractor"].get("min_area", 50),
+            pad_x=cfg["extractor"].get("pad_x", 30),
+            pad_y=cfg["extractor"].get("pad_y", 15),
             include_labels=cfg["extractor"].get("include_labels", ["good", "doubtful"]),
-            mode=cfg["extractor"].get("mode", "tight"),
             save_root=os.path.join(self.output_dir, "extracted_patches")
         )
 
