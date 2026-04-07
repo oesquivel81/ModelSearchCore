@@ -61,3 +61,32 @@ class SubpatchVisualizer:
                 plt.suptitle(f"Patch: {patch_size}, Subpatch: {subpatch_size}")
                 plt.tight_layout()
                 plt.show()
+
+    def show_multiple_resolutions(self, patch_sizes, subpatch_sizes, stride=(32, 32), cols=4):
+        """
+        Visualiza subpatches para varias resoluciones de patch y subpatch.
+        patch_sizes: lista de tuplas (ej: [(128,128), (256,256)])
+        subpatch_sizes: lista de tuplas (ej: [(32,32), (64,64)])
+        """
+        for patch_size in patch_sizes:
+            for subpatch_size in subpatch_sizes:
+                subpatch_gen = VertebraSubpatchGenerator(
+                    patch_size=patch_size,
+                    subpatch_size=subpatch_size,
+                    stride=stride
+                )
+                img_patch = subpatch_gen._resize(self.img)
+                windows = subpatch_gen._extract_windows(img_patch)
+                n = len(windows)
+                rows = int(n / cols) + (n % cols > 0)
+                fig, axes = plt.subplots(rows, cols, figsize=(12, 3 * rows))
+                axes = axes.flatten()
+                for i, (r, c, x1, y1, x2, y2, sub) in enumerate(windows):
+                    axes[i].imshow(sub, cmap="gray")
+                    axes[i].set_title(f"{patch_size}/{subpatch_size} - {i}")
+                    axes[i].axis("off")
+                for i in range(n, len(axes)):
+                    axes[i].axis("off")
+                plt.suptitle(f"Patch: {patch_size}, Subpatch: {subpatch_size}")
+                plt.tight_layout()
+                plt.show()
