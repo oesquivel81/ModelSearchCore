@@ -85,7 +85,7 @@ from .vertebra_region_batch import VertebraRegionBatch
 from .vertebra_region_dataset import VertebraRegionDataset
 
 try:
-    from varianza_patches_cnn.discord_webhook_notifier import DiscordWebhookNotifier
+    from utils.discord_webhook_notifier import DiscordWebhookNotifier
 except ImportError:
     DiscordWebhookNotifier = None
 

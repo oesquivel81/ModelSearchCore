@@ -10,10 +10,10 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from .vertebra_patch_extractor import VertebraPatchExtractor
-from .variance_patch_builder import VariancePatchBuilderV2
 from .vertebra_patch_dataset_v2 import VertebraPatchDatasetV2
 from .models import BaselinePatchCNN, VarianceInputPatchCNN, VarianceBranchPatchCNN
-from .discord_webhook_notifier import DiscordWebhookNotifier
+from utils.variance_patch_builder import VariancePatchBuilderV2
+from utils.discord_webhook_notifier import DiscordWebhookNotifier
 
 
 class VertebraVarianceExperimentV2:

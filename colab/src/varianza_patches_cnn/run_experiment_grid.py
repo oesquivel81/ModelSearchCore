@@ -5,7 +5,7 @@ import pandas as pd
 import os
 
 from .vertebra_variance_experiment_v2 import VertebraVarianceExperimentV2
-from .discord_webhook_notifier import DiscordWebhookNotifier
+from utils.discord_webhook_notifier import DiscordWebhookNotifier
 
 
 def build_experiment_batch(
