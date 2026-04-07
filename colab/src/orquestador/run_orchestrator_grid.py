@@ -246,7 +246,10 @@ def run_orchestrator_grid(base_config: dict, experiment_batch: list) -> pd.DataF
     _grid_log(f"Grid finalizado en {total_min:.1f} min | OK: {ok}/{total} | FAIL: {fail}")
     _grid_log(f"CSV: {results_csv}")
 
-    if notifier:
+    if notifier and "test_acc" in results_df.columns:
         notifier.send_grid_summary(results_df, results_csv)
 
-    return results_df.sort_values(by=["test_f1_macro", "test_acc"], ascending=False, na_position="last")
+    sort_cols = [c for c in ["test_f1_macro", "test_acc"] if c in results_df.columns]
+    if sort_cols:
+        return results_df.sort_values(by=sort_cols, ascending=False, na_position="last")
+    return results_df

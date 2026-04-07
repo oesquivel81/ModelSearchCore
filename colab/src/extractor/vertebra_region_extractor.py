@@ -89,6 +89,8 @@ class VertebraRegionExtractor:
         split_df = pd.read_csv(split_csv).copy()
 
         df["study_id"] = df[self.image_col].apply(lambda p: Path(p).stem)
+        if "split" in df.columns:
+            df = df.drop(columns=["split"])
         df = df.merge(split_df[["study_id", "split"]], on="study_id", how="left")
 
         rows = []
