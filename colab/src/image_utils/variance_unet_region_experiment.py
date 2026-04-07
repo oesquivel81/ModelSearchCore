@@ -60,20 +60,13 @@ Config de ejemplo:
 """
 
 import os
-import json
 import time
-import shutil
-import random
-from pathlib import Path
-from datetime import datetime, timezone
 from collections import defaultdict
 
-import cv2
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from scipy.spatial.distance import directed_hausdorff
 from sklearn.model_selection import train_test_split
 
 import torch
@@ -84,141 +77,22 @@ from torch.utils.data import DataLoader
 from .vertebra_region_batch import VertebraRegionBatch
 from .vertebra_region_dataset import VertebraRegionDataset
 
+from utils.metrics import (
+    dice_from_probs, iou_from_probs, precision_from_probs,
+    recall_from_probs, f1_from_precision_recall, hausdorff_distance_binary,
+)
+from utils.helpers import (
+    utc_now_iso, set_seed, ensure_dir, save_json, append_jsonl,
+    normalize_split_value, get_disk_free_gb, get_system_metrics,
+)
+
 try:
     from utils.discord_webhook_notifier import DiscordWebhookNotifier
 except ImportError:
     DiscordWebhookNotifier = None
 
-try:
-    import psutil
-except ImportError:
-    psutil = None
-
-try:
-    import requests as _requests
-except ImportError:
-    _requests = None
 
 
-# =========================================================
-# UTILIDADES
-# =========================================================
-def utc_now_iso():
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-
-
-def set_seed(seed: int = 42):
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-
-
-def ensure_dir(path: str):
-    Path(path).mkdir(parents=True, exist_ok=True)
-
-
-def save_json(path: str, data: dict):
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-
-
-def append_jsonl(path: str, data: dict):
-    with open(path, "a", encoding="utf-8") as f:
-        f.write(json.dumps(data, ensure_ascii=False) + "\n")
-
-
-def normalize_split_value(x: str) -> str:
-    x = str(x).strip().lower()
-    split_map = {
-        "training": "train", "train": "train", "tr": "train",
-        "validation": "val", "valid": "val", "val": "val", "dev": "val",
-        "testing": "test", "test": "test", "ts": "test",
-    }
-    return split_map.get(x, x)
-
-
-# =========================================================
-# MÉTRICAS
-# =========================================================
-def dice_from_probs(preds, targets, eps=1e-8):
-    inter = (preds * targets).sum(dim=(1, 2, 3))
-    union = preds.sum(dim=(1, 2, 3)) + targets.sum(dim=(1, 2, 3))
-    return ((2 * inter + eps) / (union + eps)).mean().item()
-
-
-def iou_from_probs(preds, targets, eps=1e-8):
-    inter = (preds * targets).sum(dim=(1, 2, 3))
-    union = (preds + targets - preds * targets).sum(dim=(1, 2, 3))
-    return ((inter + eps) / (union + eps)).mean().item()
-
-
-def precision_from_probs(preds, targets, eps=1e-8):
-    tp = (preds * targets).sum(dim=(1, 2, 3))
-    fp = (preds * (1 - targets)).sum(dim=(1, 2, 3))
-    return ((tp + eps) / (tp + fp + eps)).mean().item()
-
-
-def recall_from_probs(preds, targets, eps=1e-8):
-    tp = (preds * targets).sum(dim=(1, 2, 3))
-    fn = ((1 - preds) * targets).sum(dim=(1, 2, 3))
-    return ((tp + eps) / (tp + fn + eps)).mean().item()
-
-
-def f1_from_precision_recall(precision, recall, eps=1e-8):
-    return (2 * precision * recall) / (precision + recall + eps)
-
-
-def hausdorff_distance_binary(pred, target):
-    pred_pts = np.argwhere(pred > 0)
-    tgt_pts = np.argwhere(target > 0)
-    if len(pred_pts) == 0 or len(tgt_pts) == 0:
-        return np.nan
-    d1 = directed_hausdorff(pred_pts, tgt_pts)[0]
-    d2 = directed_hausdorff(tgt_pts, pred_pts)[0]
-    return max(d1, d2)
-
-
-def get_disk_free_gb(path="."):
-    usage = shutil.disk_usage(path)
-    return usage.free / (1024 ** 3)
-
-
-def get_system_metrics():
-    metrics = {
-        "cpu_percent": None, "ram_used_mb": None, "ram_total_mb": None,
-        "ram_percent": None, "gpu_name": None, "gpu_memory_used_mb": None,
-        "gpu_memory_reserved_mb": None, "gpu_memory_total_mb": None,
-        "gpu_utilization_percent": None, "disk_free_gb": None,
-    }
-
-    if psutil is not None:
-        try:
-            metrics["cpu_percent"] = psutil.cpu_percent(interval=0.2)
-            vm = psutil.virtual_memory()
-            metrics["ram_used_mb"] = vm.used / (1024 ** 2)
-            metrics["ram_total_mb"] = vm.total / (1024 ** 2)
-            metrics["ram_percent"] = vm.percent
-        except Exception:
-            pass
-
-    try:
-        metrics["disk_free_gb"] = get_disk_free_gb(".")
-    except Exception:
-        pass
-
-    if torch.cuda.is_available():
-        try:
-            metrics["gpu_name"] = torch.cuda.get_device_name(0)
-            metrics["gpu_memory_used_mb"] = torch.cuda.memory_allocated(0) / (1024 ** 2)
-            metrics["gpu_memory_reserved_mb"] = torch.cuda.memory_reserved(0) / (1024 ** 2)
-            props = torch.cuda.get_device_properties(0)
-            metrics["gpu_memory_total_mb"] = props.total_memory / (1024 ** 2)
-        except Exception:
-            pass
-        metrics["gpu_utilization_percent"] = None
-
-    return metrics
 
 
 # =========================================================
