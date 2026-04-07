@@ -151,7 +151,7 @@ class VertebraVarianceExperimentV2:
 
     def fit(self):
         metadata_df = self.extractor.extract_and_save()
-        self.builder.save_previews(metadata_df, max_samples=100)
+        self.builder.save_outputs(metadata_df, max_samples=100)
 
         train_df, val_df, test_df = self._split_df(metadata_df)
 
@@ -206,6 +206,7 @@ class VertebraVarianceExperimentV2:
 
         result = {
             "status": "completed",
+            "num_vertebras": len(metadata_df),
             "best_epoch": best_epoch,
             "best_metric_name": "val_acc",
             "best_metric_value": best_metric,
