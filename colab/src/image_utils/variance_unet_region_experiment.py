@@ -85,6 +85,11 @@ from .vertebra_region_batch import VertebraRegionBatch
 from .vertebra_region_dataset import VertebraRegionDataset
 
 try:
+    from varianza_patches_cnn.discord_webhook_notifier import DiscordWebhookNotifier
+except ImportError:
+    DiscordWebhookNotifier = None
+
+try:
     import psutil
 except ImportError:
     psutil = None
@@ -430,6 +435,14 @@ class VarianceUNetRegionExperiment:
         self.discord_webhook_url = dc.get("webhook_url", None)
         self.discord_notify_every = int(dc.get("notify_every_n_epochs", 1))
 
+        if self.discord_webhook_url and DiscordWebhookNotifier is not None:
+            self.notifier = DiscordWebhookNotifier(
+                webhook_url=self.discord_webhook_url,
+                experiment_name=self.experiment_name,
+            )
+        else:
+            self.notifier = None
+
         # --- Device ---
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -511,83 +524,27 @@ class VarianceUNetRegionExperiment:
         return os.path.join(self.base_dir, p)
 
     # ---------------------------------------------------------
-    # DISCORD
+    # DISCORD (delegado a DiscordWebhookNotifier)
     # ---------------------------------------------------------
-    def _discord_send(self, content, file_paths=None):
-        """Envía un mensaje con texto y archivos adjuntos al webhook de Discord."""
-        if not self.discord_webhook_url or _requests is None:
-            return
-
-        try:
-            if not file_paths:
-                _requests.post(
-                    self.discord_webhook_url,
-                    json={"content": content[:2000]},
-                    timeout=30,
-                )
-                return
-
-            files = []
-            opened = []
-            for i, fp in enumerate(file_paths):
-                if not os.path.isfile(fp):
-                    continue
-                fname = os.path.basename(fp)
-                fh = open(fp, "rb")
-                opened.append(fh)
-                files.append((f"file{i}", (fname, fh, "image/png")))
-
-            payload = {"content": content[:2000]}
-            _requests.post(
-                self.discord_webhook_url,
-                data={"payload_json": json.dumps(payload)},
-                files=files,
-                timeout=60,
+    def _discord_notify_epoch(self, epoch, train_result, val_metrics, is_best, epoch_image_paths):
+        if self.notifier:
+            self.notifier.send_unet_epoch(
+                epoch=epoch,
+                total_epochs=self.epochs,
+                train_result=train_result,
+                val_metrics=val_metrics,
+                is_best=is_best,
+                best_metric_name=self.best_metric_name,
+                file_paths=epoch_image_paths,
             )
 
-            for fh in opened:
-                fh.close()
-
-        except Exception as e:
-            print(f"[Discord] Error al enviar: {e}")
-
-    def _discord_notify_epoch(self, epoch, train_result, val_metrics, is_best, epoch_image_paths):
-        """Envía reporte de época a Discord."""
-        star = " \u2b50 BEST" if is_best else ""
-        msg = (
-            f"**{self.experiment_name}** | Epoch {epoch}/{self.epochs}{star}\n"
-            f"```\n"
-            f"train_loss : {train_result['train_loss']:.4f}\n"
-            f"val_loss   : {val_metrics['val_loss']:.4f}\n"
-            f"dice       : {val_metrics['dice']:.4f}\n"
-            f"iou        : {val_metrics['iou']:.4f}\n"
-            f"precision  : {val_metrics['precision']:.4f}\n"
-            f"recall     : {val_metrics['recall']:.4f}\n"
-            f"f1         : {val_metrics['f1']:.4f}\n"
-            f"hausdorff  : {val_metrics['hausdorff']:.4f}\n"
-            f"speed      : {train_result['samples_per_sec']:.1f} samples/s\n"
-            f"```"
-        )
-        self._discord_send(msg, file_paths=epoch_image_paths)
-
     def _discord_notify_complete(self, summary, final_image_paths):
-        """Envía reporte final a Discord."""
-        tm = summary.get("test_metrics", {})
-        msg = (
-            f"\u2705 **{self.experiment_name}** — Entrenamiento completado\n"
-            f"```\n"
-            f"best epoch   : {summary.get('best_epoch')}\n"
-            f"best {self.best_metric_name:9s}: {summary.get('best_metric_value', 0):.4f}\n"
-            f"test dice    : {tm.get('dice', 0):.4f}\n"
-            f"test iou     : {tm.get('iou', 0):.4f}\n"
-            f"test f1      : {tm.get('f1', 0):.4f}\n"
-            f"test hausd.  : {tm.get('hausdorff', 0):.4f}\n"
-            f"duration     : {summary.get('experiment_duration_sec', 0):.0f}s\n"
-            f"device       : {summary.get('device')}\n"
-            f"patches      : {summary.get('train_patches')}/{summary.get('val_patches')}/{summary.get('test_patches')}\n"
-            f"```"
-        )
-        self._discord_send(msg, file_paths=final_image_paths)
+        if self.notifier:
+            self.notifier.send_unet_complete(
+                summary=summary,
+                best_metric_name=self.best_metric_name,
+                file_paths=final_image_paths,
+            )
 
     # ---------------------------------------------------------
     # DATA — extracción de regiones
@@ -1290,7 +1247,7 @@ class VarianceUNetRegionExperiment:
             )
 
             # --- Discord: notificar cada N épocas ---
-            if self.discord_webhook_url and epoch % self.discord_notify_every == 0:
+            if self.notifier and epoch % self.discord_notify_every == 0:
                 epoch_images = []
                 curves_path = os.path.join(self.plots_dir, f"epoch_{epoch:03d}_curves.png")
                 if os.path.isfile(curves_path):
@@ -1391,7 +1348,7 @@ class VarianceUNetRegionExperiment:
         self.save_summary(summary)
 
         # --- Discord: notificar fin ---
-        if self.discord_webhook_url:
+        if self.notifier:
             final_images = [
                 os.path.join(self.plots_dir, "history_curves.png"),
                 os.path.join(self.best_predictions_dir, "test_predictions.png"),

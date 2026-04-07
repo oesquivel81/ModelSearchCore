@@ -1,5 +1,11 @@
 import json
+import os
 import urllib.request
+
+try:
+    import requests as _requests
+except ImportError:
+    _requests = None
 
 
 class DiscordWebhookNotifier:
@@ -7,8 +13,28 @@ class DiscordWebhookNotifier:
         self.webhook_url = webhook_url
         self.experiment_name = experiment_name
 
-    def _send(self, payload):
-        data = json.dumps(payload).encode("utf-8")
+    def _send(self, payload, file_paths=None):
+        if not self.webhook_url:
+            return
+
+        content = payload.get("content", "")[:2000]
+
+        if file_paths and _requests is not None:
+            self._send_with_files(content, file_paths)
+            return
+
+        if _requests is not None:
+            try:
+                _requests.post(
+                    self.webhook_url,
+                    json={"content": content},
+                    timeout=30,
+                )
+            except Exception as e:
+                print(f"[DiscordWebhook] Error enviando mensaje: {e}")
+            return
+
+        data = json.dumps({"content": content}).encode("utf-8")
         req = urllib.request.Request(
             self.webhook_url,
             data=data,
@@ -19,6 +45,29 @@ class DiscordWebhookNotifier:
             urllib.request.urlopen(req, timeout=10)
         except Exception as e:
             print(f"[DiscordWebhook] Error enviando mensaje: {e}")
+
+    def _send_with_files(self, content, file_paths):
+        opened = []
+        files = []
+        try:
+            for i, fp in enumerate(file_paths):
+                if not os.path.isfile(fp):
+                    continue
+                fh = open(fp, "rb")
+                opened.append(fh)
+                files.append((f"file{i}", (os.path.basename(fp), fh, "image/png")))
+
+            _requests.post(
+                self.webhook_url,
+                data={"payload_json": json.dumps({"content": content[:2000]})},
+                files=files,
+                timeout=60,
+            )
+        except Exception as e:
+            print(f"[DiscordWebhook] Error enviando con archivos: {e}")
+        finally:
+            for fh in opened:
+                fh.close()
 
     def send_text(self, text):
         self._send({"content": text})
@@ -122,3 +171,43 @@ class DiscordWebhookNotifier:
         if len(msg) > 1950:
             msg = msg[:1950] + "\n...truncado"
         self._send({"content": msg})
+
+    # ---------------------------------------------------------
+    # UNet region experiment notifications (con imágenes)
+    # ---------------------------------------------------------
+    def send_unet_epoch(self, epoch, total_epochs, train_result, val_metrics,
+                        is_best=False, best_metric_name="dice", file_paths=None):
+        star = " ⭐ BEST" if is_best else ""
+        msg = (
+            f"**{self.experiment_name}** | Epoch {epoch}/{total_epochs}{star}\n"
+            f"```\n"
+            f"train_loss : {train_result['train_loss']:.4f}\n"
+            f"val_loss   : {val_metrics['val_loss']:.4f}\n"
+            f"dice       : {val_metrics['dice']:.4f}\n"
+            f"iou        : {val_metrics['iou']:.4f}\n"
+            f"precision  : {val_metrics['precision']:.4f}\n"
+            f"recall     : {val_metrics['recall']:.4f}\n"
+            f"f1         : {val_metrics['f1']:.4f}\n"
+            f"hausdorff  : {val_metrics['hausdorff']:.4f}\n"
+            f"speed      : {train_result['samples_per_sec']:.1f} samples/s\n"
+            f"```"
+        )
+        self._send({"content": msg}, file_paths=file_paths)
+
+    def send_unet_complete(self, summary, best_metric_name="dice", file_paths=None):
+        tm = summary.get("test_metrics", {})
+        msg = (
+            f"✅ **{self.experiment_name}** — Entrenamiento completado\n"
+            f"```\n"
+            f"best epoch   : {summary.get('best_epoch')}\n"
+            f"best {best_metric_name:9s}: {summary.get('best_metric_value', 0):.4f}\n"
+            f"test dice    : {tm.get('dice', 0):.4f}\n"
+            f"test iou     : {tm.get('iou', 0):.4f}\n"
+            f"test f1      : {tm.get('f1', 0):.4f}\n"
+            f"test hausd.  : {tm.get('hausdorff', 0):.4f}\n"
+            f"duration     : {summary.get('experiment_duration_sec', 0):.0f}s\n"
+            f"device       : {summary.get('device')}\n"
+            f"patches      : {summary.get('train_patches')}/{summary.get('val_patches')}/{summary.get('test_patches')}\n"
+            f"```"
+        )
+        self._send({"content": msg}, file_paths=file_paths)
