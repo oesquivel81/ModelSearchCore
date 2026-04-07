@@ -7,7 +7,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from .vertebra_patch_extractor import VertebraPatchExtractor
-from .variance_patch_builder import VariancePatchBuilder
+from .variance_patch_builder import VariancePatchBuilderV2
 from .vertebra_patch_dataset_v2 import VertebraPatchDatasetV2
 from .models import BaselinePatchCNN, VarianceInputPatchCNN, VarianceBranchPatchCNN
 from .discord_webhook_notifier import DiscordWebhookNotifier
@@ -39,7 +39,7 @@ class VertebraVarianceExperimentV2:
             save_root=os.path.join(self.output_dir, "extracted_patches")
         )
 
-        self.builder = VariancePatchBuilder(
+        self.builder = VariancePatchBuilderV2(
             patch_size=tuple(cfg["data"]["patch_size"]),
             variance_ksize=5,
             save_root=os.path.join(self.output_dir, "processed")
