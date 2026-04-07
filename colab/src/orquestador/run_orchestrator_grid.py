@@ -117,19 +117,30 @@ def _apply_params_to_config(base_config, params):
     cfg["training"]["batch_size"] = bs
     cfg["training"]["epochs"] = ep
 
+    _MODEL_ABBR = {
+        "baseline": "BL",
+        "variance_input": "VI",
+        "variance_branch": "VB",
+    }
+
+    # lr abreviado: 1e-3 -> "lr3", 5e-4 -> "lr5e4"
+    def _lr_tag(v):
+        s = f"{v:.0e}"                       # "1e-03"
+        base, exp = s.split("e")
+        exp = str(abs(int(exp)))
+        if base == "1":
+            return f"lr{exp}"                 # lr3
+        return f"lr{base}e{exp}"              # lr5e4
+
+    m_abbr = _MODEL_ABBR.get(model_type, model_type[:2].upper())
+
     cfg["experiment_name"] = (
-        f"{base_config.get('experiment_name', 'orch')}"
-        f"__{exp_id:03d}"
-        f"__model-{model_type}"
-        f"__ps-{ph}x{pw}"
-        f"__sp-{sh}x{sw}"
-        f"__padx-{px}"
-        f"__lr-{lr}"
-        f"__ch-{bch}"
-        f"__bs-{bs}"
-        f"__ep-{ep}"
-        f"__vk-{vk}"
-        f"__seed-{seed}"
+        f"{base_config.get('experiment_name', 'MAIA_B01')}"
+        f"_{exp_id:03d}"
+        f"_{m_abbr}"
+        f"_ch{bch}"
+        f"_{_lr_tag(lr)}"
+        f"_px{px}"
     )
 
     return cfg
