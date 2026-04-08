@@ -175,6 +175,9 @@ class PatchMetrics:
                         continue
                     clean_a, haus_a = self.prepare_for_metrics(a.mask)
                     clean_b, haus_b = self.prepare_for_metrics(b.mask)
+                    # Igualar tamaño
+                    clean_a, clean_b = self.pad_to_same_shape(clean_a, clean_b)
+                    haus_a, haus_b = self.pad_to_same_shape(haus_a, haus_b)
                 elif mode == "box":
                     shape = a.mask.shape if a.mask is not None else (b.bbox[3]-b.bbox[1], b.bbox[2]-b.bbox[0])
                     clean_a = np.zeros(shape, dtype=np.uint8)
