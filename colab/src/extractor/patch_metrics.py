@@ -3,14 +3,15 @@ import numpy as np
 import pandas as pd
 
 class PatchMetrics:
-        def pad_to_same_shape(self, a, b):
-            h = max(a.shape[0], b.shape[0])
-            w = max(a.shape[1], b.shape[1])
-            aa = np.zeros((h, w), dtype=a.dtype)
-            bb = np.zeros((h, w), dtype=b.dtype)
-            aa[:a.shape[0], :a.shape[1]] = a
-            bb[:b.shape[0], :b.shape[1]] = b
-            return aa, bb
+    def pad_to_same_shape(self, a, b):
+        h = max(a.shape[0], b.shape[0])
+        w = max(a.shape[1], b.shape[1])
+        aa = np.zeros((h, w), dtype=a.dtype)
+        bb = np.zeros((h, w), dtype=b.dtype)
+        aa[:a.shape[0], :a.shape[1]] = a
+        bb[:b.shape[0], :b.shape[1]] = b
+        return aa, bb
+
     def __init__(self, kernel_size=3, hausdorff_use_edges=True):
         self.kernel_size = kernel_size
         self.hausdorff_use_edges = hausdorff_use_edges
