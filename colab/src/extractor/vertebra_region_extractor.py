@@ -56,7 +56,12 @@ class SubregionMetrics:
             report["curve_distance_mean"] = self.curve_distance_mean(centerline_a, centerline_b)
         else:
             report["curve_distance_mean"] = np.nan
-        return report
+            print(report)  # Existing print statement for report
+
+            # Visualización de parches
+            from extractor.patch_viz import show_patches
+            show_patches(patch_dtos)
+            return report
 
     def __init__(self):
         pass
