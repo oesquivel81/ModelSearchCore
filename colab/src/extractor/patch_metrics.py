@@ -3,6 +3,14 @@ import numpy as np
 import pandas as pd
 
 class PatchMetrics:
+        def pad_to_same_shape(self, a, b):
+            h = max(a.shape[0], b.shape[0])
+            w = max(a.shape[1], b.shape[1])
+            aa = np.zeros((h, w), dtype=a.dtype)
+            bb = np.zeros((h, w), dtype=b.dtype)
+            aa[:a.shape[0], :a.shape[1]] = a
+            bb[:b.shape[0], :b.shape[1]] = b
+            return aa, bb
     def __init__(self, kernel_size=3, hausdorff_use_edges=True):
         self.kernel_size = kernel_size
         self.hausdorff_use_edges = hausdorff_use_edges
@@ -116,8 +124,10 @@ class PatchMetrics:
                     continue
                 clean_a, haus_a = self.prepare_for_metrics(a.mask)
                 clean_b, haus_b = self.prepare_for_metrics(b.mask)
+                # Igualar tamaño
+                clean_a, clean_b = self.pad_to_same_shape(clean_a, clean_b)
+                haus_a, haus_b = self.pad_to_same_shape(haus_a, haus_b)
             elif mode == "box":
-                # Crea máscaras de caja
                 shape = a.mask.shape if a.mask is not None else (b.bbox[3]-b.bbox[1], b.bbox[2]-b.bbox[0])
                 clean_a = np.zeros(shape, dtype=np.uint8)
                 clean_b = np.zeros(shape, dtype=np.uint8)
