@@ -12,50 +12,52 @@ from extractor.patch_dto import PatchDTO, PatchPathDTO, PatchDTOBuilder
 # =============================
 from extractor.patch_viz import show_patches
 
+
 class SubregionMetrics:
-        @staticmethod
-        def curve_distance_mean(centerlines_a, centerlines_b):
-            """
-            Calcula la distancia promedio entre dos curvas (listas de puntos (x, y)),
-            interpolando sobre el eje y para que tengan la misma cantidad de puntos.
-            """
-            if len(centerlines_a) == 0 or len(centerlines_b) == 0:
-                return np.nan
-            # Interpolación sobre y
-            ys_a = np.array([p[1] for p in centerlines_a])
-            xs_a = np.array([p[0] for p in centerlines_a])
-            ys_b = np.array([p[1] for p in centerlines_b])
-            xs_b = np.array([p[0] for p in centerlines_b])
+    @staticmethod
+    def curve_distance_mean(centerlines_a, centerlines_b):
+        """
+        Calcula la distancia promedio entre dos curvas (listas de puntos (x, y)),
+        interpolando sobre el eje y para que tengan la misma cantidad de puntos.
+        """
+        if len(centerlines_a) == 0 or len(centerlines_b) == 0:
+            return np.nan
+        # Interpolación sobre y
+        ys_a = np.array([p[1] for p in centerlines_a])
+        xs_a = np.array([p[0] for p in centerlines_a])
+        ys_b = np.array([p[1] for p in centerlines_b])
+        xs_b = np.array([p[0] for p in centerlines_b])
 
-            y_min = max(ys_a.min(), ys_b.min())
-            y_max = min(ys_a.max(), ys_b.max())
-            n_points = 50
-            target_ys = np.linspace(y_min, y_max, n_points)
+        y_min = max(ys_a.min(), ys_b.min())
+        y_max = min(ys_a.max(), ys_b.max())
+        n_points = 50
+        target_ys = np.linspace(y_min, y_max, n_points)
 
-            interp_xs_a = np.interp(target_ys, ys_a, xs_a)
-            interp_xs_b = np.interp(target_ys, ys_b, xs_b)
+        interp_xs_a = np.interp(target_ys, ys_a, xs_a)
+        interp_xs_b = np.interp(target_ys, ys_b, xs_b)
 
-            dists = np.abs(interp_xs_a - interp_xs_b)
-            return float(np.mean(dists))
+        dists = np.abs(interp_xs_a - interp_xs_b)
+        return float(np.mean(dists))
 
-        def report_experiment_metrics(self, image, mask, boxes, centerline_a=None, centerline_b=None):
-            """
-            Calcula y retorna un dict con las métricas estándar para un experimento.
-            Si se proveen dos centerlines, calcula curve_distance_mean.
-            """
-            df_neighbors = self.consecutive_metrics(image, mask, boxes)
-            report = {
-                "mean_iou_box_neighbors": df_neighbors["iou_box"].mean(),
-                "mean_dice_mask_neighbors": df_neighbors["dice_crop"].mean(),
-                "mean_hausdorff_mask_norm_neighbors": df_neighbors["hausdorff_crop"].mean(),
-                "max_iou_box": df_neighbors["iou_box"].max(),
-                "max_dice_mask": df_neighbors["dice_crop"].max(),
-            }
-            if centerline_a is not None and centerline_b is not None:
-                report["curve_distance_mean"] = self.curve_distance_mean(centerline_a, centerline_b)
-            else:
-                report["curve_distance_mean"] = np.nan
-            return report
+    def report_experiment_metrics(self, image, mask, boxes, centerline_a=None, centerline_b=None):
+        """
+        Calcula y retorna un dict con las métricas estándar para un experimento.
+        Si se proveen dos centerlines, calcula curve_distance_mean.
+        """
+        df_neighbors = self.consecutive_metrics(image, mask, boxes)
+        report = {
+            "mean_iou_box_neighbors": df_neighbors["iou_box"].mean(),
+            "mean_dice_mask_neighbors": df_neighbors["dice_crop"].mean(),
+            "mean_hausdorff_mask_norm_neighbors": df_neighbors["hausdorff_crop"].mean(),
+            "max_iou_box": df_neighbors["iou_box"].max(),
+            "max_dice_mask": df_neighbors["dice_crop"].max(),
+        }
+        if centerline_a is not None and centerline_b is not None:
+            report["curve_distance_mean"] = self.curve_distance_mean(centerline_a, centerline_b)
+        else:
+            report["curve_distance_mean"] = np.nan
+        return report
+
     def __init__(self):
         pass
 
