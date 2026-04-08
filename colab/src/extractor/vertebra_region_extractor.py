@@ -6,6 +6,188 @@ import cv2
 import numpy as np
 import pandas as pd
 
+# =============================
+# PatchDTO, PatchPathDTO, PatchDTOBuilder
+# =============================
+from dataclasses import dataclass
+from typing import Optional, Tuple, List
+
+@dataclass
+class PatchDTO:
+    """In-memory patch data."""
+    patch_id: str
+    patient_id: str
+    image: np.ndarray
+    mask: Optional[np.ndarray]
+    bbox: Tuple[int, int, int, int]
+    centroid_x: float
+    centroid_y: float
+    method: str
+
+@dataclass
+class PatchPathDTO:
+    """Patch data with disk paths."""
+    patch_id: str
+    patient_id: str
+    image_path: str
+    mask_path: Optional[str]
+    bbox: Tuple[int, int, int, int]
+    centroid_x: float
+    centroid_y: float
+    method: str
+
+class PatchDTOBuilder:
+    def __init__(self, save_root: Optional[str] = None):
+        self.save_root = save_root
+
+    def _ensure_dirs(self):
+        if self.save_root is None:
+            raise ValueError("save_root es obligatorio si quieres guardar en disco.")
+        os.makedirs(self.save_root, exist_ok=True)
+        img_dir = os.path.join(self.save_root, "patch_images")
+        mask_dir = os.path.join(self.save_root, "patch_masks")
+        os.makedirs(img_dir, exist_ok=True)
+        os.makedirs(mask_dir, exist_ok=True)
+        return img_dir, mask_dir
+
+
+    def build_patch_dtos_on_disk(self, patient_id: str, image: np.ndarray, mask: Optional[np.ndarray], boxes: List[dict], method: str) -> List[PatchPathDTO]:
+        """
+        Builds PatchPathDTOs and saves patches to disk.
+        """
+        img_dir, mask_dir = self._ensure_dirs()
+        dtos = []
+        for item in boxes:
+            idx = item["vertebra_idx"]
+            cx = item["centroid_x"]
+            cy = item["centroid_y"]
+            x1, y1, x2, y2 = item["bbox"]
+            patch_id = f"{patient_id}_patch_{idx:02d}"
+            patch_img = image[y1:y2, x1:x2]
+            patch_mask = mask[y1:y2, x1:x2] if mask is not None else None
+            image_path = os.path.join(img_dir, f"{patch_id}.png")
+            cv2.imwrite(image_path, patch_img)
+            mask_path = None
+            if patch_mask is not None:
+                mask_path = os.path.join(mask_dir, f"{patch_id}_mask.png")
+                cv2.imwrite(mask_path, patch_mask)
+            dtos.append(
+                PatchPathDTO(
+                    patch_id=patch_id,
+                    patient_id=patient_id,
+                    image_path=image_path,
+                    mask_path=mask_path,
+                    bbox=(x1, y1, x2, y2),
+                    centroid_x=cx,
+                    centroid_y=cy,
+                    method=method
+                )
+            )
+        return dtos
+
+# =============================
+# Visualización de parches
+# =============================
+import matplotlib.pyplot as plt
+
+def show_patches(patch_dtos, max_cols=5, show_mask=True):
+    """
+    Visualiza una lista de PatchDTO o PatchPathDTO.
+    Si es PatchDTO, usa los arrays en memoria.
+    Si es PatchPathDTO, carga desde disco.
+    """
+    n = len(patch_dtos)
+    ncols = min(max_cols, n)
+    nrows = (n + ncols - 1) // ncols
+    plt.figure(figsize=(3 * ncols, 3 * nrows))
+    for i, patch in enumerate(patch_dtos):
+        plt.subplot(nrows, ncols, i + 1)
+        # Detecta tipo
+        if hasattr(patch, "image") and patch.image is not None:
+            img = patch.image
+            mask = patch.mask if hasattr(patch, "mask") else None
+        elif hasattr(patch, "image_path"):
+            import cv2
+            img = cv2.imread(patch.image_path, cv2.IMREAD_GRAYSCALE)
+            mask = None
+            if patch.mask_path is not None:
+                mask = cv2.imread(patch.mask_path, cv2.IMREAD_GRAYSCALE)
+        else:
+            continue
+        if show_mask and mask is not None:
+            plt.imshow(img, cmap='gray')
+            plt.imshow(mask, cmap='jet', alpha=0.4)
+        else:
+            plt.imshow(img, cmap='gray')
+        plt.title(f"{patch.patch_id}")
+        plt.axis('off')
+    plt.tight_layout()
+    plt.show()
+# =============================
+# Visualización de parches
+# =============================
+import matplotlib.pyplot as plt
+
+        for item in boxes:
+    """
+    Visualiza una lista de PatchDTO o PatchPathDTO.
+    Si es PatchDTO, usa los arrays en memoria.
+    Si es PatchPathDTO, carga desde disco.
+    """
+    n = len(patch_dtos)
+    ncols = min(max_cols, n)
+    nrows = (n + ncols - 1) // ncols
+    plt.figure(figsize=(3 * ncols, 3 * nrows))
+    for i, patch in enumerate(patch_dtos):
+        plt.subplot(nrows, ncols, i + 1)
+        # Detecta tipo
+        if hasattr(patch, "image") and patch.image is not None:
+            img = patch.image
+            mask = patch.mask if hasattr(patch, "mask") else None
+        elif hasattr(patch, "image_path"):
+            import cv2
+            img = cv2.imread(patch.image_path, cv2.IMREAD_GRAYSCALE)
+            mask = None
+            if patch.mask_path is not None:
+                mask = cv2.imread(patch.mask_path, cv2.IMREAD_GRAYSCALE)
+        else:
+            continue
+        if show_mask and mask is not None:
+            plt.imshow(img, cmap='gray')
+            plt.imshow(mask, cmap='jet', alpha=0.4)
+        else:
+            plt.imshow(img, cmap='gray')
+        plt.title(f"{patch.patch_id}")
+        plt.axis('off')
+    plt.tight_layout()
+    plt.show()
+            idx = item["vertebra_idx"]
+            cx = item["centroid_x"]
+            cy = item["centroid_y"]
+            x1, y1, x2, y2 = item["bbox"]
+            patch_id = f"{patient_id}_patch_{idx:02d}"
+            patch_img = image[y1:y2, x1:x2]
+            patch_mask = mask[y1:y2, x1:x2] if mask is not None else None
+            image_path = os.path.join(img_dir, f"{patch_id}.png")
+            cv2.imwrite(image_path, patch_img)
+            mask_path = None
+            if patch_mask is not None:
+                mask_path = os.path.join(mask_dir, f"{patch_id}_mask.png")
+                cv2.imwrite(mask_path, patch_mask)
+            dtos.append(
+                PatchPathDTO(
+                    patch_id=patch_id,
+                    patient_id=patient_id,
+                    image_path=image_path,
+                    mask_path=mask_path,
+                    bbox=(x1, y1, x2, y2),
+                    centroid_x=cx,
+                    centroid_y=cy,
+                    method=method
+                )
+            )
+        return dtos
+
 
 class SubregionMetrics:
     def __init__(self):
