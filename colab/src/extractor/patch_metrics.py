@@ -3,6 +3,16 @@ import numpy as np
 import pandas as pd
 
 class PatchMetrics:
+    def _safe_numeric_array(self, arr):
+        """
+        Convert input to a clean np.ndarray of float64, removing NaNs.
+        Supports pd.DataFrame, pd.Series, np.ndarray, or list.
+        """
+        if isinstance(arr, (pd.DataFrame, pd.Series)):
+            arr = arr.values
+        arr = np.asarray(arr, dtype=np.float64)
+        arr = arr[~np.isnan(arr)]
+        return arr
     def pad_to_same_shape(self, a, b):
         h = max(a.shape[0], b.shape[0])
         w = max(a.shape[1], b.shape[1])
@@ -187,16 +197,18 @@ class PatchMetrics:
 
                 intersection = np.logical_and(mask_a_bin, mask_b_bin).sum()
                 union = np.logical_or(mask_a_bin, mask_b_bin).sum()
-                sum_a = mask_a_bin.sum()
-                sum_b = mask_b_bin.sum()
+                # Explicitly cast to int to avoid overflow/underflow
+                sum_a = int(mask_a_bin.sum())
+                sum_b = int(mask_b_bin.sum())
 
                 dice = (2.0 * intersection) / (sum_a + sum_b + 1e-8)
                 iou = intersection / (union + 1e-8)
 
                 row["dice_mask"] = float(dice)
                 row["iou_mask"] = float(iou)
-                row["mask_pixels_a"] = float(sum_a)
+                row["mask_pixels_a"] = float(sum_a)  # Store as float for consistency
                 row["mask_pixels_b"] = float(sum_b)
+                # Use Python int for subtraction, then abs, then cast to float
                 row["mask_pixel_diff"] = float(abs(sum_a - sum_b))
             else:
                 row["dice_mask"] = np.nan
