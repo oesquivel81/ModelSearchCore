@@ -479,8 +479,7 @@ class VertebraAutoCentroidExtractor:
 # 2) centerline:
 #    Obtiene una línea central por filas, la suaviza y toma puntos sobre ella.
 #
-# Luego construye cajas alrededor de esos centroides.
-    """
+
 
     def __init__(
         self,
