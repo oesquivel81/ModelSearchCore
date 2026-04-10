@@ -73,6 +73,7 @@ class PatchDTOBuilder:
 
     def build_patch_dtos_on_disk(self, patient_id: str, image: np.ndarray, mask: Optional[np.ndarray], boxes: List[dict], method: str) -> List[PatchPathDTO]:
         img_dir, mask_dir = self._ensure_dirs()
+        print(f"[DEBUG] Guardando parches en: {img_dir}, máscaras en: {mask_dir}")
         dtos = []
         for item in boxes:
             idx = item["vertebra_idx"]
@@ -83,11 +84,13 @@ class PatchDTOBuilder:
             patch_img = image[y1:y2, x1:x2]
             patch_mask = mask[y1:y2, x1:x2] if mask is not None else None
             image_path = os.path.join(img_dir, f"{patch_id}.png")
-            cv2.imwrite(image_path, patch_img)
+            saved_img = cv2.imwrite(image_path, patch_img)
+            print(f"[DEBUG] Guardando imagen: {image_path} - {'OK' if saved_img else 'FALLO'}")
             mask_path = None
             if patch_mask is not None:
                 mask_path = os.path.join(mask_dir, f"{patch_id}_mask.png")
-                cv2.imwrite(mask_path, patch_mask)
+                saved_mask = cv2.imwrite(mask_path, patch_mask)
+                print(f"[DEBUG] Guardando máscara: {mask_path} - {'OK' if saved_mask else 'FALLO'}")
             dtos.append(
                 PatchPathDTO(
                     patch_id=patch_id,
