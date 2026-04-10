@@ -33,7 +33,7 @@ class PatchAblationRunner:
             variance_mode=config.variance_mode
         )
 
-        # Calcular centroides y cajas según tu pipeline real
+        # Calcular centroides y cajas usando métodos existentes
         centroids = self.extractor._compute_centroids_by_bands(mask, n_levels=9)  # Ajusta n_levels si es necesario
         boxes = self.extractor._boxes_from_centroids(mask, centroids, box_w=130, box_h=80, adaptive_width=True)
 
