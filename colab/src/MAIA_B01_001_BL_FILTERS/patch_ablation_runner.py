@@ -15,6 +15,9 @@ class AblationConfig:
 
 class PatchAblationRunner:
 
+    def run_one(self, image, mask, patient_id, config: AblationConfig):
+        return self._patched_run_one(image, mask, patient_id, config)
+
     def __init__(self, extractor, patch_builder, metrics):
         self.extractor = extractor
         self.patch_builder = patch_builder
