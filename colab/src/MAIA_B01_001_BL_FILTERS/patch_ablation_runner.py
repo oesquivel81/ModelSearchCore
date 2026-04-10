@@ -3,6 +3,19 @@ from typing import List, Dict, Any
 import pandas as pd
 import numpy as np
 
+def _safe_numeric_array(arr):
+    import numpy as np
+    import pandas as pd
+    if arr is None:
+        return np.array([], dtype=np.float64)
+    if isinstance(arr, (pd.DataFrame, pd.Series)):
+        arr = arr.to_numpy(dtype=np.float64, copy=False)
+    else:
+        arr = np.asarray(arr, dtype=np.float64)
+    arr = arr.ravel()
+    arr = arr[np.isfinite(arr)]
+    return arr
+
 @dataclass
 class AblationConfig:
     config_id: str
@@ -185,12 +198,23 @@ class PatchAblationRunner:
 
         if overlap_matrix is not None:
             try:
-                summary["overlap_mean"] = float(np.mean(overlap_matrix))
-                summary["overlap_std"] = float(np.std(overlap_matrix))
-                summary["overlap_min"] = float(np.min(overlap_matrix))
-                summary["overlap_max"] = float(np.max(overlap_matrix))
+                overlap_values = _safe_numeric_array(overlap_matrix)
+                if overlap_values.size > 0:
+                    summary["overlap_mean"] = float(np.mean(overlap_values))
+                    summary["overlap_std"] = float(np.std(overlap_values))
+                    summary["overlap_min"] = float(np.min(overlap_values))
+                    summary["overlap_max"] = float(np.max(overlap_values))
+                else:
+                    summary["overlap_mean"] = np.nan
+                    summary["overlap_std"] = np.nan
+                    summary["overlap_min"] = np.nan
+                    summary["overlap_max"] = np.nan
             except Exception as e:
                 print(f"[WARNING] No se pudieron resumir métricas de overlap_matrix: {e}")
+                summary["overlap_mean"] = np.nan
+                summary["overlap_std"] = np.nan
+                summary["overlap_min"] = np.nan
+                summary["overlap_max"] = np.nan
 
         # =========================================================
         # 8) RESULTADO FINAL
