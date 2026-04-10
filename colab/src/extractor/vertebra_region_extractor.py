@@ -418,23 +418,23 @@ class VertebraAutoBoxRecord:
 
 
 class VertebraAutoCentroidExtractor:
-        def compute_local_variance(self, image, kernel_size=5):
-            """
-            Calcula el mapa de varianza local usando un filtro de ventana cuadrada de tamaño kernel_size.
-            """
-            import cv2
-            import numpy as np
-            if kernel_size is None:
-                kernel_size = 5
-            # Normaliza a float32
-            img = image.astype(np.float32)
-            mean = cv2.blur(img, (kernel_size, kernel_size))
-            mean_sq = cv2.blur(img * img, (kernel_size, kernel_size))
-            var = mean_sq - mean * mean
-            var = np.clip(var, 0.0, None)
-            if var.max() > 0:
-                var = var / (var.max() + 1e-8)
-            return var.astype(np.float32)
+    def compute_local_variance(self, image, kernel_size=5):
+        """
+        Calcula el mapa de varianza local usando un filtro de ventana cuadrada de tamaño kernel_size.
+        """
+        import cv2
+        import numpy as np
+        if kernel_size is None:
+            kernel_size = 5
+        # Normaliza a float32
+        img = image.astype(np.float32)
+        mean = cv2.blur(img, (kernel_size, kernel_size))
+        mean_sq = cv2.blur(img * img, (kernel_size, kernel_size))
+        var = mean_sq - mean * mean
+        var = np.clip(var, 0.0, None)
+        if var.max() > 0:
+            var = var / (var.max() + 1e-8)
+        return var.astype(np.float32)
     def apply_filter(self, image, filter_name: str):
         """
         Aplica una secuencia de filtros separados por '+' sobre la imagen.
