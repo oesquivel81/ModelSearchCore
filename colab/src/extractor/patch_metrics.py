@@ -144,6 +144,7 @@ class PatchMetrics:
             else:
                 img_b_gray = img_b
 
+
             row = {
                 "idx_a": i,
                 "idx_b": i + 1,
@@ -151,13 +152,28 @@ class PatchMetrics:
                 "patch_id_b": getattr(b, "patch_id", f"patch_{i+1}"),
             }
 
-            # Estadísticas de intensidad
+            # Estadísticas de intensidad (imagen filtrada)
             row["mean_intensity_a"] = float(np.mean(img_a_gray))
             row["mean_intensity_b"] = float(np.mean(img_b_gray))
             row["std_intensity_a"] = float(np.std(img_a_gray))
             row["std_intensity_b"] = float(np.std(img_b_gray))
             row["mean_intensity_diff"] = abs(row["mean_intensity_a"] - row["mean_intensity_b"])
             row["std_intensity_diff"] = abs(row["std_intensity_a"] - row["std_intensity_b"])
+
+            # Métricas de diferencia de imagen filtrada
+            # MSE (Mean Squared Error)
+            try:
+                min_h = min(img_a_gray.shape[0], img_b_gray.shape[0])
+                min_w = min(img_a_gray.shape[1], img_b_gray.shape[1])
+                img_a_c = img_a_gray[:min_h, :min_w]
+                img_b_c = img_b_gray[:min_h, :min_w]
+                mse = float(np.mean((img_a_c - img_b_c) ** 2))
+                mae = float(np.mean(np.abs(img_a_c - img_b_c)))
+                row["mse_img"] = mse
+                row["mae_img"] = mae
+            except Exception as e:
+                row["mse_img"] = np.nan
+                row["mae_img"] = np.nan
 
             # Métricas geométricas de caja
             box_a = getattr(a, "box", None)
@@ -281,5 +297,12 @@ class PatchMetrics:
             "max_dice": df_metrics["dice_mask"].max(),
             "max_iou": df_metrics["iou_mask"].max(),
             "min_hausdorff": df_metrics["hausdorff"].min() if "hausdorff" in df_metrics else np.nan,
-            "max_hausdorff": df_metrics["hausdorff"].max() if "hausdorff" in df_metrics else np.nan
+            "max_hausdorff": df_metrics["hausdorff"].max() if "hausdorff" in df_metrics else np.nan,
+            # Métricas de diferencia de imagen filtrada
+            "mean_mse_img": df_metrics["mse_img"].mean() if "mse_img" in df_metrics else np.nan,
+            "mean_mae_img": df_metrics["mae_img"].mean() if "mae_img" in df_metrics else np.nan,
+            "max_mse_img": df_metrics["mse_img"].max() if "mse_img" in df_metrics else np.nan,
+            "max_mae_img": df_metrics["mae_img"].max() if "mae_img" in df_metrics else np.nan,
+            "min_mse_img": df_metrics["mse_img"].min() if "mse_img" in df_metrics else np.nan,
+            "min_mae_img": df_metrics["mae_img"].min() if "mae_img" in df_metrics else np.nan
         }
