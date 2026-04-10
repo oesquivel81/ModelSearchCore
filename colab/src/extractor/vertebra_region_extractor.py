@@ -852,6 +852,15 @@ class VertebraAutoCentroidExtractor:
 
         vis = self.draw_boxes(image, boxes)
         return image, mask, centroids, boxes, vis
+
+    def get_vertebra_boxes(self, image, mask, n_levels=9, box_w=130, box_h=80, adaptive_width=True):
+        """
+        Calcula los centroides usando el método de bandas y retorna las cajas generadas.
+        Puedes ajustar n_levels, box_w, box_h y adaptive_width según tu flujo.
+        """
+        centroids = self._compute_centroids_by_bands(mask, n_levels=n_levels)
+        boxes = self._boxes_from_centroids(mask, centroids, box_w=box_w, box_h=box_h, adaptive_width=adaptive_width)
+        return boxes
 import os
 import cv2
 import numpy as np
