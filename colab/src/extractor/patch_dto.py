@@ -102,13 +102,19 @@ class PatchDTOBuilder:
             patch_img = image[y1:y2, x1:x2]
             patch_mask = mask[y1:y2, x1:x2] if mask is not None else None
             image_path = os.path.join(img_dir, f"{patch_id}.png")
-            saved_img = cv2.imwrite(image_path, patch_img)
+            save_img = _prepare_patch_for_saving(patch_img)
+            saved_img = cv2.imwrite(image_path, save_img)
             print(f"[TRACE] Guardando imagen: {image_path} - {'OK' if saved_img else 'FALLO'}")
+            if not saved_img:
+                raise IOError(f"cv2.imwrite falló para {image_path}")
             mask_path = None
             if patch_mask is not None:
                 mask_path = os.path.join(mask_dir, f"{patch_id}_mask.png")
-                saved_mask = cv2.imwrite(mask_path, patch_mask)
+                save_mask = _prepare_patch_for_saving(patch_mask)
+                saved_mask = cv2.imwrite(mask_path, save_mask)
                 print(f"[TRACE] Guardando máscara: {mask_path} - {'OK' if saved_mask else 'FALLO'}")
+                if not saved_mask:
+                    raise IOError(f"cv2.imwrite falló para {mask_path}")
             dtos.append(
                 PatchPathDTO(
                     patch_id=patch_id,
@@ -123,3 +129,35 @@ class PatchDTOBuilder:
             )
         print(f"[TRACE] Total de parches generados: {len(dtos)}")
         return dtos
+
+# === Utilidades para guardar imágenes de parches con cualquier shape/canales ===
+def _to_uint8(img: np.ndarray) -> np.ndarray:
+    img = np.asarray(img)
+    if img.dtype == np.uint8:
+        return img
+    img = img.astype(np.float32)
+    min_v = np.min(img)
+    max_v = np.max(img)
+    if max_v - min_v < 1e-8:
+        return np.zeros(img.shape, dtype=np.uint8)
+    img = (img - min_v) / (max_v - min_v)
+    img = (img * 255.0).clip(0, 255).astype(np.uint8)
+    return img
+
+def _prepare_patch_for_saving(patch_img: np.ndarray) -> np.ndarray:
+    patch_img = np.asarray(patch_img)
+    if patch_img.ndim == 2:
+        return _to_uint8(patch_img)
+    if patch_img.ndim == 3:
+        h, w, c = patch_img.shape
+        if c == 1:
+            return _to_uint8(patch_img[..., 0])
+        if c == 2:
+            ch0 = _to_uint8(patch_img[..., 0])
+            ch1 = _to_uint8(patch_img[..., 1])
+            ch2 = np.zeros((h, w), dtype=np.uint8)
+            return np.stack([ch0, ch1, ch2], axis=-1)
+        if c in (3, 4):
+            return _to_uint8(patch_img)
+    raise ValueError(
+        f"No se puede guardar patch con shape={patch_img.shape}, dtype={patch_img.dtype}")
