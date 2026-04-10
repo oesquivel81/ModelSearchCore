@@ -119,16 +119,7 @@ class PatchMetrics:
     def compare_consecutive_patches(self, patch_dtos):
         import numpy as np
         import pandas as pd
-        rows = []
-
-        if patch_dtos is None or len(patch_dtos) < 2:
-            return pd.DataFrame()
-
-        import numpy as np
-        import pandas as pd
         import cv2
-
-        rows = []
 
         if patch_dtos is None or len(patch_dtos) < 2:
             return pd.DataFrame()
@@ -152,6 +143,7 @@ class PatchMetrics:
             gy = cv2.Sobel(img, cv2.CV_32F, 0, 1, ksize=3)
             return np.sqrt(gx * gx + gy * gy)
 
+        rows = []
         for i in range(len(patch_dtos) - 1):
             a = patch_dtos[i]
             b = patch_dtos[i + 1]
@@ -263,14 +255,6 @@ class PatchMetrics:
                 row["area_a"] = np.nan
                 row["area_b"] = np.nan
                 row["area_ratio"] = np.nan
-
-            rows.append(row)
-
-        return pd.DataFrame(rows)
-                row["iou_mask"] = np.nan
-                row["mask_pixels_a"] = np.nan
-                row["mask_pixels_b"] = np.nan
-                row["mask_pixel_diff"] = np.nan
 
             rows.append(row)
 
