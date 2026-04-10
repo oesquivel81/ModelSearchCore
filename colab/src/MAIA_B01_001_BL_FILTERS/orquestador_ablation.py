@@ -20,6 +20,7 @@ class AblationOrchestrator:
         df = pd.read_csv(self.dataset_csv)
         all_results = []
         log = []
+        metrics_path = os.path.join(self.save_root, "metrics_ablation.csv")
         for idx, row in df.iterrows():
             patient_id = row['patient_id']
             image_path = row['image_path']
@@ -29,14 +30,10 @@ class AblationOrchestrator:
             image = vis_proxy.img
             mask = vis_proxy.mask
             sample = {"image": image, "mask": mask, "patient_id": patient_id}
-            # Ejecutar ablation para todas las configs
-            results = self.runner.run_all([sample], self.configs)
+            # Ejecutar ablation para todas las configs y guardar CSV por batch
+            results = self.runner.run_all([sample], self.configs, csv_path=metrics_path)
             all_results.append(results)
             log.append({"patient_id": patient_id, "image_path": image_path, "mask_path": mask_path, "n_configs": len(self.configs)})
-        # Concatenar y guardar métricas
-        df_results = pd.concat(all_results, ignore_index=True)
-        metrics_path = os.path.join(self.save_root, "metrics_ablation.csv")
-        df_results.to_csv(metrics_path, index=False)
         # Guardar log/summary
         log_path = os.path.join(self.save_root, "ablation_log.csv")
         pd.DataFrame(log).to_csv(log_path, index=False)
