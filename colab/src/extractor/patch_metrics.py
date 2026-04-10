@@ -124,58 +124,121 @@ class PatchMetrics:
         if patch_dtos is None or len(patch_dtos) < 2:
             return pd.DataFrame()
 
+        import numpy as np
+        import pandas as pd
+        import cv2
+
+        rows = []
+
+        if patch_dtos is None or len(patch_dtos) < 2:
+            return pd.DataFrame()
+
+        def to_gray(img):
+            img = np.asarray(img)
+            if img.ndim == 2:
+                return img.astype(np.float32)
+            if img.ndim == 3:
+                # Si viene concat_channel (H,W,2), promediamos canales
+                return img.mean(axis=-1).astype(np.float32)
+            raise ValueError(f"Imagen con shape no soportado: {img.shape}")
+
+        def safe_crop_same_shape(a, b):
+            h = min(a.shape[0], b.shape[0])
+            w = min(a.shape[1], b.shape[1])
+            return a[:h, :w], b[:h, :w]
+
+        def gradient_mag(img):
+            gx = cv2.Sobel(img, cv2.CV_32F, 1, 0, ksize=3)
+            gy = cv2.Sobel(img, cv2.CV_32F, 0, 1, ksize=3)
+            return np.sqrt(gx * gx + gy * gy)
+
         for i in range(len(patch_dtos) - 1):
             a = patch_dtos[i]
             b = patch_dtos[i + 1]
 
-            img_a = np.asarray(a.image)
-            img_b = np.asarray(b.image)
-            mask_a = np.asarray(a.mask) if a.mask is not None else None
-            mask_b = np.asarray(b.mask) if b.mask is not None else None
-
-            # Normalización básica de shapes
-            if img_a.ndim == 3:
-                img_a_gray = img_a.mean(axis=-1)
-            else:
-                img_a_gray = img_a
-
-            if img_b.ndim == 3:
-                img_b_gray = img_b.mean(axis=-1)
-            else:
-                img_b_gray = img_b
-
+            img_a = to_gray(a.image)
+            img_b = to_gray(b.image)
+            img_a, img_b = safe_crop_same_shape(img_a, img_b)
 
             row = {
                 "idx_a": i,
                 "idx_b": i + 1,
                 "patch_id_a": getattr(a, "patch_id", f"patch_{i}"),
-                "patch_id_b": getattr(b, "patch_id", f"patch_{i+1}"),
+                "patch_id_b": getattr(b, "patch_id", f"patch_{i+1}")
             }
 
-            # Estadísticas de intensidad (imagen filtrada)
-            row["mean_intensity_a"] = float(np.mean(img_a_gray))
-            row["mean_intensity_b"] = float(np.mean(img_b_gray))
-            row["std_intensity_a"] = float(np.std(img_a_gray))
-            row["std_intensity_b"] = float(np.std(img_b_gray))
-            row["mean_intensity_diff"] = abs(row["mean_intensity_a"] - row["mean_intensity_b"])
-            row["std_intensity_diff"] = abs(row["std_intensity_a"] - row["std_intensity_b"])
+            # =====================================================
+            # 1) MÉTRICAS DE IMAGEN
+            # =====================================================
+            diff = img_a - img_b
+            abs_diff = np.abs(diff)
 
-            # Métricas de diferencia de imagen filtrada
-            # MSE (Mean Squared Error)
-            try:
-                min_h = min(img_a_gray.shape[0], img_b_gray.shape[0])
-                min_w = min(img_a_gray.shape[1], img_b_gray.shape[1])
-                img_a_c = img_a_gray[:min_h, :min_w]
-                img_b_c = img_b_gray[:min_h, :min_w]
-                mse = float(np.mean((img_a_c - img_b_c) ** 2))
-                mae = float(np.mean(np.abs(img_a_c - img_b_c)))
-                row["mse_img"] = mse
-                row["mae_img"] = mae
-            except Exception as e:
-                row["mse_img"] = np.nan
-                row["mae_img"] = np.nan
+            row["mse_img"] = float(np.mean(diff ** 2))
+            row["mae_img"] = float(np.mean(abs_diff))
 
-            # Métricas geométricas de caja
+            row["mean_intensity_a"] = float(np.mean(img_a))
+            row["mean_intensity_b"] = float(np.mean(img_b))
+            row["std_intensity_a"] = float(np.std(img_a))
+            row["std_intensity_b"] = float(np.std(img_b))
+
+            row["mean_intensity_diff"] = float(abs(row["mean_intensity_a"] - row["mean_intensity_b"]))
+            row["std_intensity_diff"] = float(abs(row["std_intensity_a"] - row["std_intensity_b"]))
+
+            # =====================================================
+            # 2) MÉTRICAS DE TEXTURA / VARIANZA
+            # =====================================================
+            row["var_img_a"] = float(np.var(img_a))
+            row["var_img_b"] = float(np.var(img_b))
+            row["var_diff"] = float(abs(row["var_img_a"] - row["var_img_b"]))
+
+            # =====================================================
+            # 3) MÉTRICAS DE GRADIENTE
+            # =====================================================
+            grad_a = gradient_mag(img_a)
+            grad_b = gradient_mag(img_b)
+            grad_a, grad_b = safe_crop_same_shape(grad_a, grad_b)
+
+            grad_diff = grad_a - grad_b
+            row["mean_grad_a"] = float(np.mean(grad_a))
+            row["mean_grad_b"] = float(np.mean(grad_b))
+            row["grad_mse"] = float(np.mean(grad_diff ** 2))
+            row["grad_mae"] = float(np.mean(np.abs(grad_diff)))
+
+            # =====================================================
+            # 4) MÉTRICAS DE MÁSCARA
+            # =====================================================
+            mask_a = getattr(a, "mask", None)
+            mask_b = getattr(b, "mask", None)
+
+            if mask_a is not None and mask_b is not None:
+                mask_a = (np.asarray(mask_a) > 0).astype(np.uint8)
+                mask_b = (np.asarray(mask_b) > 0).astype(np.uint8)
+                mask_a, mask_b = safe_crop_same_shape(mask_a, mask_b)
+
+                intersection = np.logical_and(mask_a, mask_b).sum()
+                union = np.logical_or(mask_a, mask_b).sum()
+
+                sum_a = int(mask_a.sum())
+                sum_b = int(mask_b.sum())
+
+                dice = (2.0 * intersection) / (sum_a + sum_b + 1e-8)
+                iou = intersection / (union + 1e-8)
+
+                row["dice_mask"] = float(dice)
+                row["iou_mask"] = float(iou)
+                row["mask_pixels_a"] = float(sum_a)
+                row["mask_pixels_b"] = float(sum_b)
+                row["mask_pixel_diff"] = float(abs(sum_a - sum_b))
+            else:
+                row["dice_mask"] = np.nan
+                row["iou_mask"] = np.nan
+                row["mask_pixels_a"] = np.nan
+                row["mask_pixels_b"] = np.nan
+                row["mask_pixel_diff"] = np.nan
+
+            # =====================================================
+            # 5) MÉTRICAS GEOMÉTRICAS DE CAJA
+            # =====================================================
             box_a = getattr(a, "box", None)
             box_b = getattr(b, "box", None)
 
@@ -188,10 +251,10 @@ class PatchMetrics:
                 cb_x = (xb1 + xb2) / 2.0
                 cb_y = (yb1 + yb2) / 2.0
 
-                row["centroid_distance"] = float(np.sqrt((ca_x - cb_x) ** 2 + (ca_y - cb_y) ** 2))
-
                 area_a = max(0, xa2 - xa1) * max(0, ya2 - ya1)
                 area_b = max(0, xb2 - xb1) * max(0, yb2 - yb1)
+
+                row["centroid_distance"] = float(np.sqrt((ca_x - cb_x) ** 2 + (ca_y - cb_y) ** 2))
                 row["area_a"] = float(area_a)
                 row["area_b"] = float(area_b)
                 row["area_ratio"] = float(min(area_a, area_b) / max(area_a, area_b)) if max(area_a, area_b) > 0 else np.nan
@@ -201,33 +264,9 @@ class PatchMetrics:
                 row["area_b"] = np.nan
                 row["area_ratio"] = np.nan
 
-            # Métricas de máscara
-            if mask_a is not None and mask_b is not None:
-                mask_a_bin = (mask_a > 0).astype(np.uint8)
-                mask_b_bin = (mask_b > 0).astype(np.uint8)
+            rows.append(row)
 
-                h = min(mask_a_bin.shape[0], mask_b_bin.shape[0])
-                w = min(mask_a_bin.shape[1], mask_b_bin.shape[1])
-                mask_a_bin = mask_a_bin[:h, :w]
-                mask_b_bin = mask_b_bin[:h, :w]
-
-                intersection = np.logical_and(mask_a_bin, mask_b_bin).sum()
-                union = np.logical_or(mask_a_bin, mask_b_bin).sum()
-                # Explicitly cast to int to avoid overflow/underflow
-                sum_a = int(mask_a_bin.sum())
-                sum_b = int(mask_b_bin.sum())
-
-                dice = (2.0 * intersection) / (sum_a + sum_b + 1e-8)
-                iou = intersection / (union + 1e-8)
-
-                row["dice_mask"] = float(dice)
-                row["iou_mask"] = float(iou)
-                row["mask_pixels_a"] = float(sum_a)  # Store as float for consistency
-                row["mask_pixels_b"] = float(sum_b)
-                # Use Python int for subtraction, then abs, then cast to float
-                row["mask_pixel_diff"] = float(abs(sum_a - sum_b))
-            else:
-                row["dice_mask"] = np.nan
+        return pd.DataFrame(rows)
                 row["iou_mask"] = np.nan
                 row["mask_pixels_a"] = np.nan
                 row["mask_pixels_b"] = np.nan
@@ -287,22 +326,79 @@ class PatchMetrics:
     # =============================
     # RESUMEN DE MÉTRICAS
     # =============================
-    def summarize_metrics(self, df_metrics):
-        # Usar los nombres de columna correctos según compare_consecutive_patches
-        return {
-            "mean_dice": df_metrics["dice_mask"].mean(),
-            "mean_iou": df_metrics["iou_mask"].mean(),
-            "mean_hausdorff": df_metrics["hausdorff"].mean() if "hausdorff" in df_metrics else np.nan,
-            "mean_hausdorff_norm": df_metrics["hausdorff_norm"].mean() if "hausdorff_norm" in df_metrics else np.nan,
-            "max_dice": df_metrics["dice_mask"].max(),
-            "max_iou": df_metrics["iou_mask"].max(),
-            "min_hausdorff": df_metrics["hausdorff"].min() if "hausdorff" in df_metrics else np.nan,
-            "max_hausdorff": df_metrics["hausdorff"].max() if "hausdorff" in df_metrics else np.nan,
-            # Métricas de diferencia de imagen filtrada
-            "mean_mse_img": df_metrics["mse_img"].mean() if "mse_img" in df_metrics else np.nan,
-            "mean_mae_img": df_metrics["mae_img"].mean() if "mae_img" in df_metrics else np.nan,
-            "max_mse_img": df_metrics["mse_img"].max() if "mse_img" in df_metrics else np.nan,
-            "max_mae_img": df_metrics["mae_img"].max() if "mae_img" in df_metrics else np.nan,
-            "min_mse_img": df_metrics["mse_img"].min() if "mse_img" in df_metrics else np.nan,
-            "min_mae_img": df_metrics["mae_img"].min() if "mae_img" in df_metrics else np.nan
-        }
+    def summarize_metrics(self, df_consecutive):
+        import numpy as np
+        import pandas as pd
+        if df_consecutive is None or df_consecutive.empty:
+            return {
+                "mean_dice": np.nan,
+                "mean_iou": np.nan,
+                "mean_hausdorff": np.nan,
+                "mean_hausdorff_norm": np.nan,
+                "max_dice": np.nan,
+                "max_iou": np.nan,
+                "min_hausdorff": np.nan,
+                "max_hausdorff": np.nan,
+                "mean_mse_img": np.nan,
+                "mean_mae_img": np.nan,
+                "max_mse_img": np.nan,
+                "max_mae_img": np.nan,
+                "min_mse_img": np.nan,
+                "min_mae_img": np.nan,
+            }
+
+        summary = {}
+
+        # -----------------------------
+        # Máscara
+        # -----------------------------
+        if "dice_mask" in df_consecutive.columns:
+            summary["mean_dice"] = float(df_consecutive["dice_mask"].mean())
+            summary["max_dice"] = float(df_consecutive["dice_mask"].max())
+
+        if "iou_mask" in df_consecutive.columns:
+            summary["mean_iou"] = float(df_consecutive["iou_mask"].mean())
+            summary["max_iou"] = float(df_consecutive["iou_mask"].max())
+
+        # Hausdorff aún no implementado aquí
+        summary["mean_hausdorff"] = np.nan
+        summary["mean_hausdorff_norm"] = np.nan
+        summary["min_hausdorff"] = np.nan
+        summary["max_hausdorff"] = np.nan
+
+        # -----------------------------
+        # Imagen
+        # -----------------------------
+        if "mse_img" in df_consecutive.columns:
+            summary["mean_mse_img"] = float(df_consecutive["mse_img"].mean())
+            summary["max_mse_img"] = float(df_consecutive["mse_img"].max())
+            summary["min_mse_img"] = float(df_consecutive["mse_img"].min())
+
+        if "mae_img" in df_consecutive.columns:
+            summary["mean_mae_img"] = float(df_consecutive["mae_img"].mean())
+            summary["max_mae_img"] = float(df_consecutive["mae_img"].max())
+            summary["min_mae_img"] = float(df_consecutive["mae_img"].min())
+
+        # Extras útiles
+        if "mean_intensity_diff" in df_consecutive.columns:
+            summary["mean_intensity_diff"] = float(df_consecutive["mean_intensity_diff"].mean())
+
+        if "std_intensity_diff" in df_consecutive.columns:
+            summary["mean_std_intensity_diff"] = float(df_consecutive["std_intensity_diff"].mean())
+
+        if "var_diff" in df_consecutive.columns:
+            summary["mean_var_diff"] = float(df_consecutive["var_diff"].mean())
+
+        if "grad_mse" in df_consecutive.columns:
+            summary["mean_grad_mse"] = float(df_consecutive["grad_mse"].mean())
+
+        if "grad_mae" in df_consecutive.columns:
+            summary["mean_grad_mae"] = float(df_consecutive["grad_mae"].mean())
+
+        if "centroid_distance" in df_consecutive.columns:
+            summary["mean_centroid_distance"] = float(df_consecutive["centroid_distance"].mean())
+
+        if "area_ratio" in df_consecutive.columns:
+            summary["mean_area_ratio"] = float(df_consecutive["area_ratio"].mean())
+
+        return summary
