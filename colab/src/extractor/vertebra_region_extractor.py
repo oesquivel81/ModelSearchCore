@@ -463,11 +463,12 @@ class VertebraAutoCentroidExtractor:
             elif filter_name == "unsharp_mask":
                 gaussian = cv2.GaussianBlur(image, (9,9), 10.0)
                 return cv2.addWeighted(image, 1.5, gaussian, -0.5, 0)
+
             elif filter_name == "local_variance":
                 return cv2.blur(np.square(image), (5,5)) - np.square(cv2.blur(image, (5,5)))
-                else:
-                     print(f"[WARN] Filtro desconocido: {filter_name}, se retorna la imagen original.")
-                     return image
+            else:
+                print(f"[WARN] Filtro desconocido: {filter_name}, se retorna la imagen original.")
+                return image
 
 # ---
 # Calcula centroides automáticamente desde máscara binaria con dos métodos:
