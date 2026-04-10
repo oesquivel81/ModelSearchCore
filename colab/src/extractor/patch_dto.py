@@ -41,19 +41,23 @@ class PatchDTOBuilder:
         os.makedirs(mask_dir, exist_ok=True)
         return img_dir, mask_dir
 
-    def build_patch_dtos_in_memory(self, patient_id: str, image: np.ndarray, mask: Optional[np.ndarray], boxes: List[dict], method: str, add_overlay: bool = False) -> List[PatchDTO]:
+    def build_patch_dtos_in_memory(self, patient_id: str, image: np.ndarray, mask: Optional[np.ndarray], boxes: List[dict], method: str, add_overlay: bool = False, patch_size=None, stride=None) -> List[PatchDTO]:
         dtos = []
         for item in boxes:
             idx = item["vertebra_idx"]
             cx = item["centroid_x"]
             cy = item["centroid_y"]
             x1, y1, x2, y2 = item["bbox"]
+            # Si patch_size está definido, forzar el tamaño del parche
+            if patch_size is not None:
+                w, h = patch_size
+                x2 = x1 + w
+                y2 = y1 + h
             patch_id = f"{patient_id}_patch_{idx:02d}"
             patch_img = image[y1:y2, x1:x2].copy()
             patch_mask = mask[y1:y2, x1:x2].copy() if mask is not None else None
             overlay = None
             if add_overlay and patch_mask is not None:
-                # Simple overlay: grayscale + mask in red
                 overlay = np.stack([patch_img]*3, axis=-1)
                 overlay[patch_mask > 0] = [255, 0, 0]
             dtos.append(
@@ -71,7 +75,7 @@ class PatchDTOBuilder:
             )
         return dtos
 
-    def build_patch_dtos_on_disk(self, patient_id: str, image: np.ndarray, mask: Optional[np.ndarray], boxes: List[dict], method: str) -> List[PatchPathDTO]:
+    def build_patch_dtos_on_disk(self, patient_id: str, image: np.ndarray, mask: Optional[np.ndarray], boxes: List[dict], method: str, patch_size=None, stride=None) -> List[PatchPathDTO]:
         print(f"[TRACE] build_patch_dtos_on_disk llamado para patient_id={patient_id}, method={method}")
         # Crear subcarpetas por paciente y método (filtro)
         patient_dir = os.path.join(self.save_root, str(patient_id))
@@ -89,6 +93,11 @@ class PatchDTOBuilder:
             cx = item["centroid_x"]
             cy = item["centroid_y"]
             x1, y1, x2, y2 = item["bbox"]
+            # Si patch_size está definido, forzar el tamaño del parche
+            if patch_size is not None:
+                w, h = patch_size
+                x2 = x1 + w
+                y2 = y1 + h
             patch_id = f"{patient_id}_patch_{idx:02d}"
             patch_img = image[y1:y2, x1:x2]
             patch_mask = mask[y1:y2, x1:x2] if mask is not None else None
