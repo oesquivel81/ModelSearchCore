@@ -20,7 +20,7 @@ class PatchAblationRunner:
         self.patch_builder = patch_builder
         self.metrics = metrics
 
-    def run_one(self, image, mask, patient_id: str, config: AblationConfig) -> pd.DataFrame:
+    def _patched_run_one(self, image, mask, patient_id, config: AblationConfig):
         boxes = self.extractor.get_vertebra_boxes(image=image, mask=mask)
 
         patch_dtos = self.patch_builder.build_patch_dtos_in_memory(
