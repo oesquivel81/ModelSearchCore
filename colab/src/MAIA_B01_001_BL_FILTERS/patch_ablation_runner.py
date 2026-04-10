@@ -42,6 +42,10 @@ class PatchAblationRunner:
         print(f"\n[TRACE] _patched_run_one patient_id={patient_id}")
         print(f"[TRACE] config={config}")
 
+        print("extractor class:", self.extractor.__class__.__name__)
+        print("patch_builder class:", self.patch_builder.__class__.__name__)
+        print("metrics class:", self.metrics.__class__.__name__)
+
         # =========================================================
         # 1) FILTRADO BASE
         # =========================================================
@@ -182,6 +186,9 @@ class PatchAblationRunner:
         else:
             df_consecutive = self.metrics.compare_consecutive_patches(patch_dtos_mem)
             overlap_matrix = self.metrics.compute_overlap_matrix(patch_dtos_mem)
+            print("compute_overlap_matrix type:", type(overlap_matrix))
+            print("compute_overlap_matrix shape:", getattr(overlap_matrix, "shape", None))
+            print(overlap_matrix)
             summary = self.metrics.summarize_metrics(df_consecutive)
 
         # =========================================================
