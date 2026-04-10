@@ -260,13 +260,14 @@ class PatchMetrics:
     # RESUMEN DE MÉTRICAS
     # =============================
     def summarize_metrics(self, df_metrics):
+        # Usar los nombres de columna correctos según compare_consecutive_patches
         return {
-            "mean_dice": df_metrics["dice"].mean(),
-            "mean_iou": df_metrics["iou"].mean(),
-            "mean_hausdorff": df_metrics["hausdorff"].mean(),
-            "mean_hausdorff_norm": df_metrics["hausdorff_norm"].mean(),
-            "max_dice": df_metrics["dice"].max(),
-            "max_iou": df_metrics["iou"].max(),
-            "min_hausdorff": df_metrics["hausdorff"].min(),
-            "max_hausdorff": df_metrics["hausdorff"].max()
+            "mean_dice": df_metrics["dice_mask"].mean(),
+            "mean_iou": df_metrics["iou_mask"].mean(),
+            "mean_hausdorff": df_metrics["hausdorff"].mean() if "hausdorff" in df_metrics else np.nan,
+            "mean_hausdorff_norm": df_metrics["hausdorff_norm"].mean() if "hausdorff_norm" in df_metrics else np.nan,
+            "max_dice": df_metrics["dice_mask"].max(),
+            "max_iou": df_metrics["iou_mask"].max(),
+            "min_hausdorff": df_metrics["hausdorff"].min() if "hausdorff" in df_metrics else np.nan,
+            "max_hausdorff": df_metrics["hausdorff"].max() if "hausdorff" in df_metrics else np.nan
         }
