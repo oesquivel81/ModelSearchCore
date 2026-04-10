@@ -54,7 +54,10 @@ class PatchAblationRunner:
         import pandas as pd
         metrics_df = pd.DataFrame([summary])
         for field in AblationConfig.__annotations__:
-            metrics_df[field] = getattr(config, field)
+            value = getattr(config, field)
+            if isinstance(value, (tuple, list, dict)):
+                value = str(value)
+            metrics_df[field] = value
         return metrics_df
 
     def run_all(self, dataset: List[Dict[str, Any]], configs: List[AblationConfig]) -> pd.DataFrame:

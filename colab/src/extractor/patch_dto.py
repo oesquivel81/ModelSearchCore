@@ -73,7 +73,13 @@ class PatchDTOBuilder:
 
     def build_patch_dtos_on_disk(self, patient_id: str, image: np.ndarray, mask: Optional[np.ndarray], boxes: List[dict], method: str) -> List[PatchPathDTO]:
         print(f"[TRACE] build_patch_dtos_on_disk llamado para patient_id={patient_id}, method={method}")
-        img_dir, mask_dir = self._ensure_dirs()
+        # Crear subcarpetas por paciente y método (filtro)
+        patient_dir = os.path.join(self.save_root, str(patient_id))
+        method_dir = os.path.join(patient_dir, str(method))
+        img_dir = os.path.join(method_dir, "patch_images")
+        mask_dir = os.path.join(method_dir, "patch_masks")
+        os.makedirs(img_dir, exist_ok=True)
+        os.makedirs(mask_dir, exist_ok=True)
         print(f"[TRACE] Directorios: img_dir={img_dir}, mask_dir={mask_dir}")
         print(f"[TRACE] Número de boxes recibidos: {len(boxes)}")
         dtos = []
