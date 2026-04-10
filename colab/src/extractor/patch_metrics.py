@@ -106,53 +106,107 @@ class PatchMetrics:
     # =============================
     # COMPARACIÓN ENTRE PARCHES CONSECUTIVOS
     # =============================
-    def compare_consecutive_patches(self, patch_dtos, mode="mask"):
-        """
-        patch_dtos: lista de DTOs que tengan al menos:
-          - patch_id
-          - patient_id
-          - mask (np.ndarray)
-          - bbox (tuple)
-        mode: 'mask' o 'box'
-        """
+    def compare_consecutive_patches(self, patch_dtos):
+        import numpy as np
+        import pandas as pd
         rows = []
-        patch_dtos = sorted(patch_dtos, key=lambda p: p.patch_id)
+
+        if patch_dtos is None or len(patch_dtos) < 2:
+            return pd.DataFrame()
+
         for i in range(len(patch_dtos) - 1):
             a = patch_dtos[i]
             b = patch_dtos[i + 1]
-            if mode == "mask":
-                if a.mask is None or b.mask is None:
-                    continue
-                clean_a, haus_a = self.prepare_for_metrics(a.mask)
-                clean_b, haus_b = self.prepare_for_metrics(b.mask)
-                # Igualar tamaño
-                clean_a, clean_b = self.pad_to_same_shape(clean_a, clean_b)
-                haus_a, haus_b = self.pad_to_same_shape(haus_a, haus_b)
-            elif mode == "box":
-                shape = a.mask.shape if a.mask is not None else (b.bbox[3]-b.bbox[1], b.bbox[2]-b.bbox[0])
-                clean_a = np.zeros(shape, dtype=np.uint8)
-                clean_b = np.zeros(shape, dtype=np.uint8)
-                x1a, y1a, x2a, y2a = a.bbox
-                x1b, y1b, x2b, y2b = b.bbox
-                clean_a[y1a:y2a, x1a:x2a] = 1
-                clean_b[y1b:y2b, x1b:x2b] = 1
-                haus_a = clean_a
-                haus_b = clean_b
+
+            img_a = np.asarray(a.image)
+            img_b = np.asarray(b.image)
+            mask_a = np.asarray(a.mask) if a.mask is not None else None
+            mask_b = np.asarray(b.mask) if b.mask is not None else None
+
+            # Normalización básica de shapes
+            if img_a.ndim == 3:
+                img_a_gray = img_a.mean(axis=-1)
             else:
-                raise ValueError("mode debe ser 'mask' o 'box'")
-            d = self.dice(clean_a, clean_b)
-            j = self.iou(clean_a, clean_b)
-            h = self.hausdorff(haus_a, haus_b)
-            h_norm = self.normalize_hausdorff(h, clean_a.shape)
-            rows.append({
-                "patient_id": a.patient_id,
-                "patch_id_a": a.patch_id,
-                "patch_id_b": b.patch_id,
-                "dice": d,
-                "iou": j,
-                "hausdorff": h,
-                "hausdorff_norm": h_norm
-            })
+                img_a_gray = img_a
+
+            if img_b.ndim == 3:
+                img_b_gray = img_b.mean(axis=-1)
+            else:
+                img_b_gray = img_b
+
+            row = {
+                "idx_a": i,
+                "idx_b": i + 1,
+                "patch_id_a": getattr(a, "patch_id", f"patch_{i}"),
+                "patch_id_b": getattr(b, "patch_id", f"patch_{i+1}"),
+            }
+
+            # Estadísticas de intensidad
+            row["mean_intensity_a"] = float(np.mean(img_a_gray))
+            row["mean_intensity_b"] = float(np.mean(img_b_gray))
+            row["std_intensity_a"] = float(np.std(img_a_gray))
+            row["std_intensity_b"] = float(np.std(img_b_gray))
+            row["mean_intensity_diff"] = abs(row["mean_intensity_a"] - row["mean_intensity_b"])
+            row["std_intensity_diff"] = abs(row["std_intensity_a"] - row["std_intensity_b"])
+
+            # Métricas geométricas de caja
+            box_a = getattr(a, "box", None)
+            box_b = getattr(b, "box", None)
+
+            if box_a is not None and box_b is not None:
+                xa1, ya1, xa2, ya2 = box_a
+                xb1, yb1, xb2, yb2 = box_b
+
+                ca_x = (xa1 + xa2) / 2.0
+                ca_y = (ya1 + ya2) / 2.0
+                cb_x = (xb1 + xb2) / 2.0
+                cb_y = (yb1 + yb2) / 2.0
+
+                row["centroid_distance"] = float(np.sqrt((ca_x - cb_x) ** 2 + (ca_y - cb_y) ** 2))
+
+                area_a = max(0, xa2 - xa1) * max(0, ya2 - ya1)
+                area_b = max(0, xb2 - xb1) * max(0, yb2 - yb1)
+                row["area_a"] = float(area_a)
+                row["area_b"] = float(area_b)
+                row["area_ratio"] = float(min(area_a, area_b) / max(area_a, area_b)) if max(area_a, area_b) > 0 else np.nan
+            else:
+                row["centroid_distance"] = np.nan
+                row["area_a"] = np.nan
+                row["area_b"] = np.nan
+                row["area_ratio"] = np.nan
+
+            # Métricas de máscara
+            if mask_a is not None and mask_b is not None:
+                mask_a_bin = (mask_a > 0).astype(np.uint8)
+                mask_b_bin = (mask_b > 0).astype(np.uint8)
+
+                h = min(mask_a_bin.shape[0], mask_b_bin.shape[0])
+                w = min(mask_a_bin.shape[1], mask_b_bin.shape[1])
+                mask_a_bin = mask_a_bin[:h, :w]
+                mask_b_bin = mask_b_bin[:h, :w]
+
+                intersection = np.logical_and(mask_a_bin, mask_b_bin).sum()
+                union = np.logical_or(mask_a_bin, mask_b_bin).sum()
+                sum_a = mask_a_bin.sum()
+                sum_b = mask_b_bin.sum()
+
+                dice = (2.0 * intersection) / (sum_a + sum_b + 1e-8)
+                iou = intersection / (union + 1e-8)
+
+                row["dice_mask"] = float(dice)
+                row["iou_mask"] = float(iou)
+                row["mask_pixels_a"] = float(sum_a)
+                row["mask_pixels_b"] = float(sum_b)
+                row["mask_pixel_diff"] = float(abs(sum_a - sum_b))
+            else:
+                row["dice_mask"] = np.nan
+                row["iou_mask"] = np.nan
+                row["mask_pixels_a"] = np.nan
+                row["mask_pixels_b"] = np.nan
+                row["mask_pixel_diff"] = np.nan
+
+            rows.append(row)
+
         return pd.DataFrame(rows)
 
     # =============================
