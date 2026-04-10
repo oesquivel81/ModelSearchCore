@@ -236,7 +236,7 @@ class PatchAblationRunner:
 
         return metrics_df
 
-    def run_all(self, dataset: List[Dict[str, Any]], configs: List[AblationConfig]) -> pd.DataFrame:
+    def run_all(self, dataset: List[Dict[str, Any]], configs: List[AblationConfig], csv_path=None) -> pd.DataFrame:
         rows = []
         for sample in dataset:
             for config in configs:
@@ -250,7 +250,10 @@ class PatchAblationRunner:
                     rows.extend(result.to_dict(orient="records"))
                 else:
                     rows.append(result)
-        return pd.DataFrame(rows)
+        df = pd.DataFrame(rows)
+        if csv_path is not None:
+            df.to_csv(csv_path, index=False)
+        return df
 
     def apply_filter(self, image, filter_name: str):
         # stub
