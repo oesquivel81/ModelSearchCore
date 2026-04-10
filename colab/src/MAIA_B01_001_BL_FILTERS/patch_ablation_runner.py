@@ -61,14 +61,16 @@ class PatchAblationRunner:
         rows = []
         for sample in dataset:
             for config in configs:
-                rows.append(
-                    self.run_one(
-                        image=sample["image"],
-                        mask=sample["mask"],
-                        patient_id=sample["patient_id"],
-                        config=config
-                    )
+                result = self.run_one(
+                    image=sample["image"],
+                    mask=sample["mask"],
+                    patient_id=sample["patient_id"],
+                    config=config
                 )
+                if isinstance(result, pd.DataFrame):
+                    rows.extend(result.to_dict(orient="records"))
+                else:
+                    rows.append(result)
         return pd.DataFrame(rows)
 
     def apply_filter(self, image, filter_name: str):
