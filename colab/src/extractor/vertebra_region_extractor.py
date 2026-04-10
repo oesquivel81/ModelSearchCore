@@ -465,19 +465,20 @@ class VertebraAutoCentroidExtractor:
                 return cv2.addWeighted(image, 1.5, gaussian, -0.5, 0)
             elif filter_name == "local_variance":
                 return cv2.blur(np.square(image), (5,5)) - np.square(cv2.blur(image, (5,5)))
-            else:
-                print(f"[WARN] Filtro desconocido: {filter_name}, se retorna la imagen original.")
-                return image
-    """
-    Calcula centroides automáticamente desde máscara binaria con dos métodos:
+                else:
+                     print(f"[WARN] Filtro desconocido: {filter_name}, se retorna la imagen original.")
+                     return image
 
-    1) bands:
-       Divide la columna en bandas verticales y calcula un centroide por banda.
-
-    2) centerline:
-       Obtiene una línea central por filas, la suaviza y toma puntos sobre ella.
-
-    Luego construye cajas alrededor de esos centroides.
+# ---
+# Calcula centroides automáticamente desde máscara binaria con dos métodos:
+#
+# 1) bands:
+#    Divide la columna en bandas verticales y calcula un centroide por banda.
+#
+# 2) centerline:
+#    Obtiene una línea central por filas, la suaviza y toma puntos sobre ella.
+#
+# Luego construye cajas alrededor de esos centroides.
     """
 
     def __init__(
