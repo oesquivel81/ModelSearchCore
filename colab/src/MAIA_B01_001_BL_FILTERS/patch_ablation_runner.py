@@ -25,23 +25,25 @@ class PatchAblationRunner:
 
     def _patched_run_one(self, image, mask, patient_id, config: AblationConfig):
         print(f"[TRACE] _patched_run_one llamado para patient_id={patient_id}, config={config}")
-        boxes = self.extractor.get_vertebra_boxes(image=image, mask=mask)
+        # Aplica el filtro configurado antes de extraer boxes y parches
+        filtered_image = self.extractor.apply_filter(image, config.filter_name)
+        boxes = self.extractor.get_vertebra_boxes(image=filtered_image, mask=mask)
         print(f"[TRACE] get_vertebra_boxes devolvió {len(boxes)} boxes")
 
-        # Guardar parches y máscaras en disco
+        # Guardar parches y máscaras en disco usando la imagen filtrada
         patch_dtos = self.patch_builder.build_patch_dtos_on_disk(
             patient_id=patient_id,
-            image=image,
+            image=filtered_image,
             mask=mask,
             boxes=boxes,
             method=f"{config.filter_name}_{config.variance_mode}"
         )
 
-        # Si necesitas las métricas, puedes reconstruir los PatchDTOs en memoria para análisis
+        # Para métricas, puedes usar la imagen filtrada o la original según tu flujo
         from extractor.patch_dto import PatchDTO
         patch_dtos_mem = self.patch_builder.build_patch_dtos_in_memory(
             patient_id=patient_id,
-            image=image,
+            image=filtered_image,
             mask=mask,
             boxes=boxes,
             method=f"{config.filter_name}_{config.variance_mode}"

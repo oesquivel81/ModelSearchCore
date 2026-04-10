@@ -418,6 +418,56 @@ class VertebraAutoBoxRecord:
 
 
 class VertebraAutoCentroidExtractor:
+
+        def apply_filter(self, image, filter_name: str):
+            """
+            Aplica una secuencia de filtros separados por '+' sobre la imagen.
+            """
+            if not filter_name or filter_name == "none":
+                return image
+            filters = filter_name.split("+")
+            out = image.copy()
+            for f in filters:
+                out = self.apply_single_filter(out, f)
+            return out
+
+        def apply_single_filter(self, image, filter_name: str):
+            """
+            Aplica un filtro individual sobre la imagen.
+            """
+            import cv2
+            import numpy as np
+            if filter_name == "gaussian":
+                return cv2.GaussianBlur(image, (5, 5), 0)
+            elif filter_name == "median":
+                return cv2.medianBlur(image, 5)
+            elif filter_name == "bilateral":
+                return cv2.bilateralFilter(image, 9, 75, 75)
+            elif filter_name == "sobel":
+                return cv2.Sobel(image, cv2.CV_64F, 1, 0, ksize=5)
+            elif filter_name == "scharr":
+                return cv2.Scharr(image, cv2.CV_64F, 1, 0)
+            elif filter_name == "prewitt":
+                kernelx = np.array([[1,0,-1],[1,0,-1],[1,0,-1]])
+                return cv2.filter2D(image, -1, kernelx)
+            elif filter_name == "laplacian":
+                return cv2.Laplacian(image, cv2.CV_64F)
+            elif filter_name == "log":
+                blur = cv2.GaussianBlur(image, (3,3), 0)
+                return cv2.Laplacian(blur, cv2.CV_64F)
+            elif filter_name == "canny":
+                return cv2.Canny(image, 100, 200)
+            elif filter_name == "clahe":
+                clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+                return clahe.apply(image)
+            elif filter_name == "unsharp_mask":
+                gaussian = cv2.GaussianBlur(image, (9,9), 10.0)
+                return cv2.addWeighted(image, 1.5, gaussian, -0.5, 0)
+            elif filter_name == "local_variance":
+                return cv2.blur(np.square(image), (5,5)) - np.square(cv2.blur(image, (5,5)))
+            else:
+                print(f"[WARN] Filtro desconocido: {filter_name}, se retorna la imagen original.")
+                return image
     """
     Calcula centroides automáticamente desde máscara binaria con dos métodos:
 
