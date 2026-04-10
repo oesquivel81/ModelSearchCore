@@ -418,6 +418,17 @@ class VertebraAutoBoxRecord:
 
 
 class VertebraAutoCentroidExtractor:
+        def concat_channels(self, image, variance_map):
+            """
+            Combina la imagen y el mapa de varianza como canales (axis=-1).
+            Ambos deben tener la misma forma espacial.
+            Devuelve un array shape (H, W, 2) tipo float32.
+            """
+            import numpy as np
+            if image.shape != variance_map.shape:
+                raise ValueError(f"Las formas no coinciden: image {image.shape}, variance_map {variance_map.shape}")
+            stacked = np.stack([image.astype(np.float32), variance_map.astype(np.float32)], axis=-1)
+            return stacked
     def compute_local_variance(self, image, kernel_size=5):
         """
         Calcula el mapa de varianza local usando un filtro de ventana cuadrada de tamaño kernel_size.
