@@ -72,10 +72,13 @@ class PatchDTOBuilder:
         return dtos
 
     def build_patch_dtos_on_disk(self, patient_id: str, image: np.ndarray, mask: Optional[np.ndarray], boxes: List[dict], method: str) -> List[PatchPathDTO]:
+        print(f"[TRACE] build_patch_dtos_on_disk llamado para patient_id={patient_id}, method={method}")
         img_dir, mask_dir = self._ensure_dirs()
-        print(f"[DEBUG] Guardando parches en: {img_dir}, máscaras en: {mask_dir}")
+        print(f"[TRACE] Directorios: img_dir={img_dir}, mask_dir={mask_dir}")
+        print(f"[TRACE] Número de boxes recibidos: {len(boxes)}")
         dtos = []
         for item in boxes:
+            print(f"[TRACE] Procesando box: {item}")
             idx = item["vertebra_idx"]
             cx = item["centroid_x"]
             cy = item["centroid_y"]
@@ -85,12 +88,12 @@ class PatchDTOBuilder:
             patch_mask = mask[y1:y2, x1:x2] if mask is not None else None
             image_path = os.path.join(img_dir, f"{patch_id}.png")
             saved_img = cv2.imwrite(image_path, patch_img)
-            print(f"[DEBUG] Guardando imagen: {image_path} - {'OK' if saved_img else 'FALLO'}")
+            print(f"[TRACE] Guardando imagen: {image_path} - {'OK' if saved_img else 'FALLO'}")
             mask_path = None
             if patch_mask is not None:
                 mask_path = os.path.join(mask_dir, f"{patch_id}_mask.png")
                 saved_mask = cv2.imwrite(mask_path, patch_mask)
-                print(f"[DEBUG] Guardando máscara: {mask_path} - {'OK' if saved_mask else 'FALLO'}")
+                print(f"[TRACE] Guardando máscara: {mask_path} - {'OK' if saved_mask else 'FALLO'}")
             dtos.append(
                 PatchPathDTO(
                     patch_id=patch_id,
@@ -103,4 +106,5 @@ class PatchDTOBuilder:
                     method=method
                 )
             )
+        print(f"[TRACE] Total de parches generados: {len(dtos)}")
         return dtos
