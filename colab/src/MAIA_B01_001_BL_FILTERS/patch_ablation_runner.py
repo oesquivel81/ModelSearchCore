@@ -23,7 +23,8 @@ class PatchAblationRunner:
     def _patched_run_one(self, image, mask, patient_id, config: AblationConfig):
         boxes = self.extractor.get_vertebra_boxes(image=image, mask=mask)
 
-        patch_dtos = self.patch_builder.build_patch_dtos_in_memory(
+        # Guardar parches y máscaras en disco
+        patch_dtos = self.patch_builder.build_patch_dtos_on_disk(
             patient_id=patient_id,
             image=image,
             mask=mask,
@@ -31,8 +32,23 @@ class PatchAblationRunner:
             method=f"{config.filter_name}_{config.variance_mode}"
         )
 
-        df_consecutive = self.metrics.compare_consecutive_patches(patch_dtos)
-        overlap_matrix = self.metrics.compute_overlap_matrix(patch_dtos)
+        # Si necesitas las métricas, puedes reconstruir los PatchDTOs en memoria para análisis
+        # O adaptar tus métricas para trabajar con PatchPathDTO si es necesario
+        # Aquí, por simplicidad, solo se usan los datos de boxes para métricas
+        # Si tus métricas requieren los arrays, deberías cargar las imágenes de disco o usar ambos builders
+
+        # Ejemplo: si quieres seguir usando las métricas actuales, puedes crear los PatchDTOs en memoria solo para análisis
+        from extractor.patch_dto import PatchDTO
+        patch_dtos_mem = self.patch_builder.build_patch_dtos_in_memory(
+            patient_id=patient_id,
+            image=image,
+            mask=mask,
+            boxes=boxes,
+            method=f"{config.filter_name}_{config.variance_mode}"
+        )
+
+        df_consecutive = self.metrics.compare_consecutive_patches(patch_dtos_mem)
+        overlap_matrix = self.metrics.compute_overlap_matrix(patch_dtos_mem)
         summary = self.metrics.summarize_metrics(df_consecutive)
 
         import pandas as pd
