@@ -737,6 +737,9 @@ class VertebraAutoCentroidExtractor:
     # VISUALIZACIÓN
     # =========================================================
     def draw_boxes(self, image, boxes, color=(255, 255, 0), thickness=2, draw_idx=True):
+        """
+        color en BGR para OpenCV.
+        """
         if len(image.shape) == 2:
             vis = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
         else:
@@ -1547,6 +1550,35 @@ class VertebraRegionExtractor:
         return out_df
 
 
+# ========== OVERLAP SUMMARY BLOCK (robust, numpy-safe) ==========
+    def summarize_overlap_matrix(self, overlap_matrix, summary):
+        """
+        Robustly summarize overlap_matrix (pd.DataFrame, pd.Series, or np.ndarray) into summary dict.
+        Ensures no FutureWarnings or conversion errors.
+        """
+        import numpy as np
+        import pandas as pd
+        def _safe_numeric_array(arr):
+            if isinstance(arr, (pd.DataFrame, pd.Series)):
+                arr = arr.values
+            arr = np.asarray(arr, dtype=np.float64)
+            arr = arr[~np.isnan(arr)]
+            return arr
+        if overlap_matrix is not None:
+            try:
+                overlap_values = _safe_numeric_array(overlap_matrix)
+                if overlap_values.size > 0:
+                    summary["overlap_mean"] = float(np.mean(overlap_values))
+                    summary["overlap_std"] = float(np.std(overlap_values))
+                    summary["overlap_min"] = float(np.min(overlap_values))
+                    summary["overlap_max"] = float(np.max(overlap_values))
+                else:
+                    summary["overlap_mean"] = np.nan
+                    summary["overlap_std"] = np.nan
+                    summary["overlap_min"] = np.nan
+                    summary["overlap_max"] = np.nan
+            except Exception as e:
+                print(f"[WARNING] No se pudieron resumir métricas de overlap_matrix: {e}")
 def build_study_split(index_csv, seed=42, image_col="radiograph_path",
                       train_size=0.70, val_size=0.15, test_size=0.15):
     df = pd.read_csv(index_csv)
