@@ -128,61 +128,250 @@ class RegionSet:
         self.regions.append(region)
 
     def get_region(self, region_id: str) -> RegionNode | None:
-        for r in self.regions:
-            if r.region_id == region_id:
-                return r
-        return None
 
-    def sort_by_curve(self) -> list[RegionNode]:
-        return sorted(
-            self.regions,
-            key=lambda r: (
-                float("inf") if r.curve_param is None else r.curve_param,
-                float("inf") if r.order_index is None else r.order_index,
-                r.region_id,
-            ),
-        )
+        # === Adecuaciones para soporte de 3 modos de experimento, curva y nervio simplicial ===
+        import numpy as np
+        import pandas as pd
+        import json
+        from dataclasses import dataclass, field, asdict
+        from typing import List, Tuple, Optional, Dict, Any
 
-    def sort_by_order(self) -> list[RegionNode]:
-        return sorted(
-            self.regions,
-            key=lambda r: (
-                float("inf") if r.order_index is None else r.order_index,
-                r.region_id,
-            ),
-        )
+        # --- Estructuras base ---
+        @dataclass
+        class BoundingBox:
+            x1: int
+            y1: int
+            x2: int
+            y2: int
+            def as_tuple(self):
+                return (self.x1, self.y1, self.x2, self.y2)
 
-    def detect_pairwise_intersections(self) -> list[tuple[str, str]]:
-        hits: list[tuple[str, str]] = []
-        for a, b in combinations(self.regions, 2):
-            if a.bbox.intersects(b.bbox):
-                a.add_intersection(b.region_id)
-                b.add_intersection(a.region_id)
-                hits.append((a.region_id, b.region_id))
-        return hits
+        @dataclass
+        class RegionConfig:
+            config_id: str
+            filter_name: str
+            use_variance: bool
+            variance_mode: str
+            patch_size: Tuple[int, int]
+            stride: int
+            variance_kernel: int
 
-    def build_nerve_simplices(self, max_dim: int = 2) -> set[Simplex]:
-        """
-        Construye simplexes por intersección de bounding boxes.
-        max_dim=2 genera hasta triángulos.
-        max_dim=3 genera hasta tetraedros, etc.
-        """
-        simplices: set[Simplex] = set()
+        @dataclass
+        class RegionNode:
+            region_id: str
+            patient_id: str
+            config: RegionConfig
+            bbox: BoundingBox
+            centroid: Tuple[float, float] = (0, 0)
+            curve_param: Optional[float] = None
+            order_index: Optional[int] = None
+            intersections: List[str] = field(default_factory=list)
+            num_intersections: int = 0
+            num_simplices: int = 0
+            lives_in_union: bool = False
+            lives_in_intersection: bool = False
+            lives_near_curve: bool = False
+            support_label: Optional[str] = None
+            metadata: Dict[str, Any] = field(default_factory=dict)
 
-        # vértices
-        for r in self.regions:
-            s = Simplex((r.region_id,))
-            simplices.add(s)
-            r.add_simplex(s)
+            def to_dict(self):
+                d = asdict(self)
+                d['config_id'] = self.config.config_id
+                d['filter_name'] = self.config.filter_name
+                d['use_variance'] = self.config.use_variance
+                d['variance_mode'] = self.config.variance_mode
+                d['patch_size'] = self.config.patch_size
+                d['stride'] = self.config.stride
+                d['variance_kernel'] = self.config.variance_kernel
+                d['bbox'] = self.bbox.as_tuple()
+                return d
 
-        region_map = {r.region_id: r for r in self.regions}
-        region_ids = [r.region_id for r in self.regions]
+        # --- Utilidades geométricas y de curva ---
+        def bbox_intersection(b1: BoundingBox, b2: BoundingBox) -> bool:
+            # Retorna True si los bboxes se intersectan
+            return not (b1.x2 < b2.x1 or b1.x1 > b2.x2 or b1.y2 < b2.y1 or b1.y1 > b2.y2)
 
-        for k in range(2, max_dim + 2):  # k vertices => simplex dim k-1
-            for combo in combinations(region_ids, k):
-                boxes = [region_map[rid].bbox for rid in combo]
-                if self._all_intersect_together(boxes):
-                    s = Simplex(combo)
+        def point_to_polyline_distance(point: Tuple[float, float], polyline: List[Tuple[float, float]]) -> float:
+            # Distancia mínima de un punto a una polilínea
+            px, py = point
+            return min(np.hypot(px - x, py - y) for x, y in polyline)
+
+        def project_point_to_curve(point: Tuple[float, float], curve: List[Tuple[float, float]]):
+            # Proyecta un punto sobre la curva y retorna (param, idx)
+            dists = [np.hypot(point[0] - x, point[1] - y) for x, y in curve]
+            idx = int(np.argmin(dists))
+            return idx / (len(curve)-1), idx
+
+        # --- Selección de regiones por experimento ---
+        def select_regions_by_experiment(regions: List[RegionNode], experiment_mode: str, curve: Optional[List[Tuple[float, float]]] = None, curve_radius: float = 10.0) -> List[RegionNode]:
+            selected = []
+            if experiment_mode == "all_patches":
+                selected = regions.copy()
+            elif experiment_mode == "curve_selected_patches":
+                if curve is None:
+                    raise ValueError("Se requiere curva para este experimento")
+                for r in regions:
+                    dist = point_to_polyline_distance(r.centroid, curve)
+                    if dist <= curve_radius:
+                        r.lives_near_curve = True
+                        param, idx = project_point_to_curve(r.centroid, curve)
+                        r.curve_param = param
+                        r.order_index = idx
+                        selected.append(r)
+            elif experiment_mode == "curve_all_patches_nerve":
+                if curve is None:
+                    raise ValueError("Se requiere curva para este experimento")
+                for r in regions:
+                    dist = point_to_polyline_distance(r.centroid, curve)
+                    r.lives_near_curve = dist <= curve_radius
+                    param, idx = project_point_to_curve(r.centroid, curve)
+                    r.curve_param = param
+                    r.order_index = idx
+                    selected.append(r)
+            else:
+                raise ValueError(f"Modo de experimento desconocido: {experiment_mode}")
+            return selected
+
+        # --- Intersecciones y nervio simplicial ---
+        def compute_region_intersections(regions: List[RegionNode]):
+            n = len(regions)
+            for i in range(n):
+                for j in range(i+1, n):
+                    if bbox_intersection(regions[i].bbox, regions[j].bbox):
+                        regions[i].intersections.append(regions[j].region_id)
+                        regions[j].intersections.append(regions[i].region_id)
+            for r in regions:
+                r.num_intersections = len(r.intersections)
+
+        def build_nerve_simplicial_complex(regions: List[RegionNode], max_dim: int = 2):
+            # 0-simplex: cada región
+            # 1-simplex: pares que se intersectan
+            # 2-simplex: tríos con intersección común
+            from itertools import combinations
+            simplexes = []
+            # 0-simplex
+            for r in regions:
+                simplexes.append((r.region_id,))
+            # 1-simplex
+            for r1, r2 in combinations(regions, 2):
+                if r2.region_id in r1.intersections:
+                    simplexes.append(tuple(sorted([r1.region_id, r2.region_id])))
+            # 2-simplex
+            if max_dim >= 2:
+                for r1, r2, r3 in combinations(regions, 3):
+                    ids = [r1.region_id, r2.region_id, r3.region_id]
+                    if (r2.region_id in r1.intersections and
+                        r3.region_id in r1.intersections and
+                        r3.region_id in r2.intersections):
+                        simplexes.append(tuple(sorted(ids)))
+            # (Generalizar a mayor dimensión si se requiere)
+            # Contar simplexes por región
+            simplex_count = {r.region_id: 0 for r in regions}
+            for s in simplexes:
+                for rid in s:
+                    simplex_count[rid] += 1
+            for r in regions:
+                r.num_simplices = simplex_count[r.region_id]
+            return simplexes
+
+        # --- Exportación y tabla ---
+        def build_region_table(regions: List[RegionNode]) -> pd.DataFrame:
+            return pd.DataFrame([r.to_dict() for r in regions])
+
+        def export_regions_to_json(regions: List[RegionNode], path: Optional[str] = None) -> str:
+            data = [r.to_dict() for r in regions]
+            js = json.dumps(data, indent=2)
+            if path:
+                with open(path, "w") as f:
+                    f.write(js)
+            return js
+
+        # --- Visualización ---
+        def plot_regions_curve_and_nerve(
+            image: Optional[np.ndarray],
+            regions: List[RegionNode],
+            curve: Optional[List[Tuple[float, float]]] = None,
+            simplexes: Optional[List[Tuple[str, ...]]] = None,
+            show_only_selected: bool = True,
+            color_by: str = "cluster"
+        ):
+            import matplotlib.pyplot as plt
+            fig, ax = plt.subplots(figsize=(8, 8))
+            if image is not None:
+                ax.imshow(image, cmap="gray" if image.ndim == 2 else None)
+            # Dibujar curva
+            if curve is not None:
+                cx, cy = zip(*curve)
+                ax.plot(cx, cy, "-b", lw=2, label="Curva guía")
+            # Colores por cluster o experimento
+            color_map = plt.cm.get_cmap("tab10")
+            for idx, r in enumerate(regions):
+                if show_only_selected and not r.lives_near_curve:
+                    continue
+                x1, y1, x2, y2 = r.bbox.as_tuple()
+                color = color_map(idx % 10)
+                ax.add_patch(plt.Rectangle((x1, y1), x2-x1, y2-y1, fill=False, edgecolor=color, lw=2))
+                ax.plot(r.centroid[0], r.centroid[1], "o", color=color, label=f"{r.region_id}")
+            # Dibujar nervio
+            if simplexes is not None:
+                id2centroid = {r.region_id: r.centroid for r in regions}
+                for s in simplexes:
+                    if len(s) == 2:
+                        c1, c2 = id2centroid[s[0]], id2centroid[s[1]]
+                        ax.plot([c1[0], c2[0]], [c1[1], c2[1]], "-r", lw=1)
+                    elif len(s) == 3:
+                        c = [id2centroid[rid] for rid in s]
+                        poly = plt.Polygon(c, fill=None, edgecolor="g", lw=1, linestyle=":")
+                        ax.add_patch(poly)
+            ax.legend()
+            plt.show()
+
+        # --- Ejemplo mínimo reproducible ---
+        if __name__ == "__main__":
+            # Curva mock (línea recta)
+            curve = [(20, 20), (60, 60), (100, 100)]
+
+            # Configuración de ejemplo
+            cfg = RegionConfig(
+                config_id="cfg1",
+                filter_name="gaussian",
+                use_variance=True,
+                variance_mode="concat_channel",
+                patch_size=(40, 40),
+                stride=16,
+                variance_kernel=7
+            )
+
+            # Regiones de ejemplo
+            regions = [
+                RegionNode(region_id="R1", patient_id="P001", config=cfg, bbox=BoundingBox(10, 10, 50, 50), centroid=(30, 30)),
+                RegionNode(region_id="R2", patient_id="P001", config=cfg, bbox=BoundingBox(40, 40, 80, 80), centroid=(60, 60)),
+                RegionNode(region_id="R3", patient_id="P001", config=cfg, bbox=BoundingBox(90, 90, 120, 120), centroid=(100, 100)),
+            ]
+
+            # --- Selección por experimento ---
+            experiment_mode = "curve_selected_patches"  # Cambia a "all_patches" o "curve_all_patches_nerve"
+            selected_regions = select_regions_by_experiment(regions, experiment_mode, curve=curve, curve_radius=25)
+
+            # --- Intersecciones y nervio ---
+            compute_region_intersections(selected_regions)
+            simplexes = build_nerve_simplicial_complex(selected_regions, max_dim=2)
+
+            # --- Tabla y JSON ---
+            df = build_region_table(selected_regions)
+            print("Tabla consolidada:")
+            print(df)
+            print("\nJSON:")
+            print(export_regions_to_json(selected_regions))
+
+            # --- Visualización ---
+            plot_regions_curve_and_nerve(
+                image=None,  # Puedes poner una imagen base si tienes
+                regions=selected_regions,
+                curve=curve,
+                simplexes=simplexes,
+                show_only_selected=False
+            )
                     simplices.add(s)
                     for rid in combo:
                         region_map[rid].add_simplex(s)

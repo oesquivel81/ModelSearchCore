@@ -264,3 +264,56 @@ print("¡Ablation terminada y métricas guardadas para S_37!")
 ```
 
 Esto te permite probar todas las configuraciones sobre una sola imagen/máscara, guardando los resultados en Google Drive.
+
+
+
+## Análisis de filtros en el experimento de ablación
+
+En esta etapa del análisis de ablación se observó que los filtros sí modifican la señal de la imagen, pero no todas las métricas reflejan ese cambio de la misma manera. En versiones iniciales del pipeline, métricas como **Dice** e **IoU** permanecían casi constantes entre configuraciones, lo que indicaba que estaban más influenciadas por la geometría de las máscaras y de las cajas que por el efecto real del preprocesamiento sobre la imagen. Por esta razón, fue necesario incorporar métricas sensibles al contenido visual de los parches.
+
+A partir de ello, se consideraron métricas de imagen como:
+
+- `mean_mae_img`
+- `mean_intensity_diff`
+- `mean_var_diff`
+- `mean_grad_mae`
+- `input_mean` / `input_std`
+
+Estas métricas permiten evaluar cambios en:
+
+- **brillo**
+- **contraste**
+- **textura**
+- **bordes**
+- **dispersión global de intensidades**
+
+Por ejemplo:
+
+- filtros como **Laplaciano**, **Sobel**, **Scharr** o **Prewitt** afectan principalmente la estructura de bordes;
+- **CLAHE** modifica la distribución de intensidades y el contraste local;
+- combinaciones con mapas de varianza pueden resaltar regiones con mayor textura o heterogeneidad.
+
+## Criterio de selección de métricas
+
+Para seleccionar métricas útiles no bastó con observar sus valores de manera aislada, sino que se realizó un análisis de:
+
+1. **variación estadística**, para verificar que realmente cambiaran entre configuraciones;
+2. **correlación**, para identificar métricas redundantes.
+
+Cuando dos métricas presentaban una correlación muy alta, se interpretó que describían casi el mismo fenómeno, por lo que convenía conservar solo una. El objetivo no fue quedarse con muchas métricas, sino con un conjunto pequeño pero representativo de fenómenos distintos.
+
+En términos prácticos, se buscó conservar métricas que representaran:
+
+- **cambio global de imagen**
+- **cambio de intensidad**
+- **cambio de textura**
+- **cambio de bordes**
+- **dispersión estadística del input**
+
+## Conclusión
+
+Con este criterio, el ranking de configuraciones dejó de depender únicamente de métricas geométricas poco sensibles al filtro y pasó a apoyarse en métricas que sí capturan el efecto real del preprocesamiento. Esto permitió identificar configuraciones visualmente más estables y construir una base más confiable para:
+
+- inspección cualitativa mediante grids de imágenes;
+- comparación entre filtros;
+- análisis posteriores como **TDA**, **clustering** o **embeddings**.
