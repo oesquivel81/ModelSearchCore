@@ -16,7 +16,9 @@ def normalize_filter_names(filter_names):
     if isinstance(filter_names, (list, tuple, set)):
         return list({str(f) for f in filter_names if f is not None})
     return [str(filter_names)]
+
 # === Métricas agregadas y relacionales por ventana ===
+def compute_window_metrics(window, metric_names):
     """Calcula media, mediana, std, min, max, rango para cada métrica en la ventana."""
     import numpy as np
     results = {}
