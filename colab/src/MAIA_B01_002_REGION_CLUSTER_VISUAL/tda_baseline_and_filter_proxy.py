@@ -4,6 +4,25 @@ from pathlib import Path
 from MAIA_B01_002_REGION_CLUSTER_VISUAL.tda_patch_combinations import generate_patch_combinations, evaluate_combination, ExperimentBundle, export_experiment_bundle
 
 class TDABaselineAndFilterProxy:
+        def _patch_to_region(self, patch):
+            from MAIA_B01_002_REGION_CLUSTER_VISUAL.tda_patch_combinations import RegionRecord
+            return RegionRecord(
+                region_id=patch.patch_id,
+                patient_id=patch.patient_id,
+                config_id="",
+                filter_name="",
+                use_variance=None,
+                variance_mode=None,
+                patch_size=None,
+                stride=None,
+                variance_kernel=None,
+                bbox=patch.bbox,
+                centroid=(patch.centroid_x, patch.centroid_y) if patch.centroid_x is not None and patch.centroid_y is not None else None,
+                curve_param=None,
+                order_index=None,
+                lives_near_curve=None,
+                metadata={}
+            )
     def __init__(self, config):
         self.config = config
         self.tda_root = config["tda_root"]
@@ -72,11 +91,10 @@ class TDABaselineAndFilterProxy:
             self._run_tda_for_patches(patches, filtro, curve)
 
     def _run_tda_for_patches(self, patches, label, curve):
-        # Aquí deberías implementar la lógica de combinaciones y nervio usando las restricciones
-        # Por cada combinación válida de parches (según restricciones), calcula el nervio y métricas
-        # Este es un esqueleto, debes adaptar a tu lógica de TDA
+        # Convertir PatchPathDTO a RegionRecord
+        region_records = [self._patch_to_region(p) for p in patches]
         combos_raw = generate_patch_combinations(
-            patches,
+            region_records,
             min_k=self.restrictions['min_k'],
             max_k=self.restrictions['max_k'],
             max_combination_count=self.restrictions['max_combination_count']
@@ -95,7 +113,7 @@ class TDABaselineAndFilterProxy:
             patient_id=self.patient_id,
             config_id=label,
             experiment_mode="all_patches",
-            regions=patches,
+            regions=region_records,
             combinations=combo_records,
             simplexes=[s for s in combo_records if getattr(s, 'is_valid_simplex', False)],
             filter_params=None
