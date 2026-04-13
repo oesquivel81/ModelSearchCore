@@ -1,0 +1,20 @@
+{
+  "tda_root": "/content/drive/MyDrive/TDA_PIPELINE",
+  "patient_id": "S_37",
+  "restrictions": {
+    "min_k": 2,
+    "max_k": 4,
+    "max_combination_count": 8
+  },
+  "experiment_modes": [
+    "all_patches",
+    "curve_selected_patches",
+    "curve_all_patches_nerve"
+  ],
+  "metrics": [
+    "mean_dice",
+    "mean_iou",
+    "score_global",
+    "mean_mae_img"
+  ]
+}

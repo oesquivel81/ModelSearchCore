@@ -1,0 +1,12 @@
+{
+  "base_path": "worker/MaIA_Scoliosis_Dataset",
+  "img_rel_path": "Scoliosis/S_37.jpg",
+  "mask_rel_path": "LabelMultiClass_Gray_JPG/LabelMulti_S_37.jpg",
+  "n_levels": 9,
+  "box_w": 130,
+  "box_h": 80,
+  "adaptive_width": true,
+  "split": "train",
+  "base_output_dir": "/content/drive/MyDrive/TDA_PIPELINE",
+  "save_patches": true
+}

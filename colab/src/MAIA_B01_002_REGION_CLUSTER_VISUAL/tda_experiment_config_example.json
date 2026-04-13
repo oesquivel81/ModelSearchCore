@@ -1,0 +1,21 @@
+{
+  "centroid_csv": "/content/drive/MyDrive/TDA_PIPELINE/patches_processor_S_37/centroid_curve_S_37.csv",
+  "experiment_modes": [
+    "all_patches",
+    "curve_selected_patches",
+    "curve_all_patches_nerve"
+  ],
+  "curve_radius": 25,
+  "metrics": [
+    "mean_dice",
+    "mean_iou",
+    "score_global",
+    "mean_mae_img"
+  ],
+  "output_dir": "/content/drive/MyDrive/TDA_PIPELINE/tda_results_S_37",
+  "filters": [
+    "clahe+gaussian",
+    "none",
+    "sobel"
+  ]
+}
