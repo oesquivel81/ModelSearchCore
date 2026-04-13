@@ -6,7 +6,7 @@ def normalize_filter_names(filter_names):
     if filter_names is None:
         return []
     if isinstance(filter_names, str):
-        return [filter_names]
+        import pandas as pd
     try:
         import pandas as pd
         if isinstance(filter_names, pd.Series):
@@ -17,7 +17,6 @@ def normalize_filter_names(filter_names):
         return list({str(f) for f in filter_names if f is not None})
     return [str(filter_names)]
 # === Métricas agregadas y relacionales por ventana ===
-def compute_window_metrics(window, metric_names):
     """Calcula media, mediana, std, min, max, rango para cada métrica en la ventana."""
     import numpy as np
     results = {}
