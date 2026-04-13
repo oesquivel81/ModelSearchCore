@@ -16,6 +16,7 @@ def normalize_filter_names(filter_names):
     if isinstance(filter_names, (list, tuple, set)):
         return list({str(f) for f in filter_names if f is not None})
     return [str(filter_names)]
+
 import os
 import pandas as pd
 from pathlib import Path
