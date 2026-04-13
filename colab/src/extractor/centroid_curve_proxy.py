@@ -1,3 +1,4 @@
+from extractor.patch_viz import show_patches
 import os
 import pandas as pd
 from extractor.vertebra_region_extractor import VertebraAutoCentroidExtractor, PatchDTOBuilder
@@ -16,10 +17,8 @@ class CentroidCurveProxy:
         self.split = config.get("split", "unspecified")
         # Nuevo: directorio base de salida y subdirectorio por paciente
         self.base_output_dir = config.get("base_output_dir", ".")
-        self.patient_id = config.get("patient_id")
-        if self.patient_id is None:
-            # Si no viene explícito, lo inferimos del nombre de la imagen
-            self.patient_id = os.path.splitext(os.path.basename(self.img_rel_path))[0]
+        # Siempre inferir patient_id del nombre de la imagen
+        self.patient_id = os.path.splitext(os.path.basename(self.img_rel_path))[0]
         self.patches_processor_dir = os.path.join(self.base_output_dir, f"patches_processor_{self.patient_id}")
         os.makedirs(self.patches_processor_dir, exist_ok=True)
 
@@ -56,6 +55,7 @@ class CentroidCurveProxy:
             method="bands",
             add_overlay=True
         )
+        self.patches = patch_dtos  # Para visualización externa
 
         # 5. Calcular métricas consecutivas (máscara)
         metrics = PatchMetrics(kernel_size=3, hausdorff_use_edges=True)
@@ -73,3 +73,12 @@ class CentroidCurveProxy:
         print("\nResumen de métricas:")
         for k, v in df_summary.items():
             print(f"{k}: {v}")
+
+    def show_patches(self, show_mask=False, show_overlay=True):
+        """
+        Visualiza los parches generados usando show_patches de patch_viz.
+        """
+        if not hasattr(self, 'patches') or self.patches is None:
+            print("Primero ejecuta run_all() para generar los parches.")
+            return
+        show_patches(self.patches, show_mask=show_mask, show_overlay=show_overlay)
