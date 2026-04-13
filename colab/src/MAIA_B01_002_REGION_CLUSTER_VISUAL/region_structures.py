@@ -1,3 +1,5 @@
+
+from __future__ import annotations
 import numpy as np
 import pandas as pd
 import json
@@ -149,7 +151,7 @@ def plot_regions_curve_and_nerve(
                 ax.add_patch(poly)
     ax.legend()
     plt.show()
-from __future__ import annotations
+
 from dataclasses import dataclass, field
 from enum import Enum
 from itertools import combinations
