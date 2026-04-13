@@ -222,7 +222,7 @@ class VertebraComponentExtractor:
     # =========================================================
     # GUARDAR PATCHES + METADATA CSV
     # =========================================================
-    def save_patches_with_metadata(self, sample_id="sample"):
+    def save_patches_with_metadata(self, sample_id="sample", split_name=None):
         """
         Guarda:
         - patch_images/*.png
@@ -242,6 +242,7 @@ class VertebraComponentExtractor:
         os.makedirs(mask_dir, exist_ok=True)
 
         rows = []
+        curva_rows = []
 
         for i, comp in enumerate(self.components):
             img_name = f"{sample_id}_vertebra_{i:02d}.png"
@@ -267,13 +268,29 @@ class VertebraComponentExtractor:
                 "bbox_y2": y2,
                 "image_patch_path": img_path,
                 "mask_patch_path": mask_path,
+                "split": split_name if split_name is not None else "unspecified"
+            })
+
+            # Para la curva de centroides
+            curva_rows.append({
+                "centroid_x": comp["centroid_x"],
+                "centroid_y": comp["centroid_y"],
+                "area": comp["area"],
+                "component_idx": i,
+                "split": split_name if split_name is not None else "unspecified"
             })
 
         df = pd.DataFrame(rows)
         csv_path = os.path.join(self.save_dir, f"{sample_id}_patch_metadata.csv")
         df.to_csv(csv_path, index=False)
 
+        # Guardar curva de centroides por split
+        curva_df = pd.DataFrame(curva_rows)
+        curva_csv_path = os.path.join(self.save_dir, f"{sample_id}_centroid_curve.csv")
+        curva_df.to_csv(curva_csv_path, index=False)
+
         print(f"Metadata guardada en: {csv_path}")
+        print(f"Curva de centroides guardada en: {curva_csv_path}")
         return df
 
     # =========================================================
