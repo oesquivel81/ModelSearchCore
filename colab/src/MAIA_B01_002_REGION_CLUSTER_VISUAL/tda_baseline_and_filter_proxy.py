@@ -26,10 +26,29 @@ class TDABaselineAndFilterProxy:
         return filters
 
     def _load_patches(self, patch_dir):
-        # Carga todos los parches (imágenes) de un directorio
+        # Carga todos los parches como PatchPathDTO usando PatchDTOBuilder
+        from extractor.patch_dto import PatchDTOBuilder
+        builder = PatchDTOBuilder()
+        # Asume que los nombres de los archivos siguen el patrón {patient_id}_patch_{idx:02d}.png
         exts = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp"}
         files = [os.path.join(patch_dir, f) for f in os.listdir(patch_dir) if Path(f).suffix.lower() in exts]
-        return sorted(files)
+        # Crear PatchPathDTO para cada archivo
+        patches = []
+        for f in files:
+            patch_id = os.path.splitext(os.path.basename(f))[0]
+            patches.append(
+                builder.build_patch_path_dto_from_file(
+                    patch_id=patch_id,
+                    patient_id=self.patient_id,
+                    image_path=f,
+                    mask_path=None,  # Si tienes máscaras, puedes inferir el path aquí
+                    bbox=None,
+                    centroid_x=None,
+                    centroid_y=None,
+                    method="bands"
+                )
+            )
+        return patches
 
     def run(self):
         # 1. Leer curva de centroides
