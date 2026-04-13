@@ -1,0 +1,8 @@
+{
+  "base_path": "worker/MaIA_Scoliosis_Dataset",
+  "img_rel_path": "Scoliosis/S_37.jpg",
+  "mask_rel_path": "LabelMultiClass_Gray_JPG/LabelMulti_S_37.jpg",
+  "patient_id": "S_37",
+  "save_root": "/content/drive/MyDrive/patches_guardados",
+  "all_filter_combinations": true
+}
