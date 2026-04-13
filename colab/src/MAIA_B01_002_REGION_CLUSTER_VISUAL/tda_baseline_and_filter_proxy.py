@@ -4,25 +4,25 @@ from pathlib import Path
 from MAIA_B01_002_REGION_CLUSTER_VISUAL.tda_patch_combinations import generate_patch_combinations, evaluate_combination, ExperimentBundle, export_experiment_bundle
 
 class TDABaselineAndFilterProxy:
-        def _patch_to_region(self, patch):
-            from MAIA_B01_002_REGION_CLUSTER_VISUAL.tda_patch_combinations import RegionRecord
-            return RegionRecord(
-                region_id=patch.patch_id,
-                patient_id=patch.patient_id,
-                config_id="",
-                filter_name="",
-                use_variance=None,
-                variance_mode=None,
-                patch_size=None,
-                stride=None,
-                variance_kernel=None,
-                bbox=patch.bbox,
-                centroid=(patch.centroid_x, patch.centroid_y) if patch.centroid_x is not None and patch.centroid_y is not None else None,
-                curve_param=None,
-                order_index=None,
-                lives_near_curve=None,
-                metadata={}
-            )
+    def _patch_to_region(self, patch):
+        from MAIA_B01_002_REGION_CLUSTER_VISUAL.tda_patch_combinations import RegionRecord
+        return RegionRecord(
+            region_id=patch.patch_id,
+            patient_id=patch.patient_id,
+            config_id="",
+            filter_name="",
+            use_variance=None,
+            variance_mode=None,
+            patch_size=None,
+            stride=None,
+            variance_kernel=None,
+            bbox=patch.bbox,
+            centroid=(patch.centroid_x, patch.centroid_y) if patch.centroid_x is not None and patch.centroid_y is not None else None,
+            curve_param=None,
+            order_index=None,
+            lives_near_curve=None,
+            metadata={}
+        )
     def __init__(self, config):
         self.config = config
         self.tda_root = config["tda_root"]
