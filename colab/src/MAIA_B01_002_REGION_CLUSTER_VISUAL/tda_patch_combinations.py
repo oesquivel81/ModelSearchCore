@@ -345,9 +345,44 @@ def evaluate_combination(combo: Tuple[RegionRecord, ...], filter_params: Dict[st
     k = len(combo)
     member_region_ids = [r.region_id for r in combo]
     member_indices = list(range(k))
-    filter_name = combo[0].filter_name if combo else ''
-    patient_id = combo[0].patient_id if combo else ''
-    config_id = combo[0].config_id if combo else ''
+    # Validar unicidad de filter_name y config_id
+    filter_names = set(getattr(r, 'filter_name', None) for r in combo)
+    config_ids = set(getattr(r, 'config_id', None) for r in combo)
+    patient_ids = set(getattr(r, 'patient_id', None) for r in combo)
+    if len(filter_names) != 1 or len(config_ids) != 1 or len(patient_ids) != 1:
+        # Rechazar combinación y dejar trazabilidad
+        return CombinationRecord(
+            combination_id='|'.join(member_region_ids),
+            patient_id=patient_ids.pop() if len(patient_ids) == 1 else '',
+            config_id=config_ids.pop() if len(config_ids) == 1 else '',
+            filter_name=filter_names.pop() if len(filter_names) == 1 else '',
+            k=k,
+            simplex_dim=k-1,
+            members=list(combo),
+            member_indices=member_indices,
+            member_region_ids=member_region_ids,
+            member_image_paths=[getattr(r, 'image_path', '') for r in combo],
+            member_centroids=[],
+            centroid_span_y=None,
+            centroid_span_x=None,
+            mean_centroid_distance=None,
+            max_centroid_distance=None,
+            window_metrics={},
+            window_relational_metrics={},
+            is_contiguous_in_order=False,
+            is_curve_consistent=False,
+            is_valid_simplex=False,
+            validity_reason="rejected_mixed_filter_or_config",
+            rejection_reason="Regiones de filtros/configs distintos en la misma combinación",
+            selection_mode=selection_mode,
+            experiment_mode=experiment_mode,
+            ordering_source="vertebra_idx",
+            spatial_file_used="",
+            metadata={"rejected_mixed_filter_or_config": True}
+        )
+    filter_name = filter_names.pop()
+    config_id = config_ids.pop()
+    patient_id = patient_ids.pop()
     member_image_paths = [getattr(r, 'image_path', '') for r in combo]
     def safe_float(val):
         try:
