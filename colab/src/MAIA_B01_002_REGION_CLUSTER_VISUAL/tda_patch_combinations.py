@@ -54,9 +54,17 @@ def compute_window_relational_metrics(window, metric_names):
             diffs = np.abs(np.diff(arr))
             results[f'window_mean_abs_diff_{m}'] = float(np.nanmean(diffs))
             results[f'window_max_abs_diff_{m}'] = float(np.nanmax(diffs))
-    # Distancias entre centroides consecutivos
-    centroids = [(getattr(r, 'centroid_x', np.nan), getattr(r, 'centroid_y', np.nan)) for r in window]
-    steps = [np.linalg.norm(np.subtract(centroids[i+1], centroids[i])) for i in range(len(centroids)-1) if not np.isnan(centroids[i][0]) and not np.isnan(centroids[i+1][0])]
+    # Distancias entre centroides consecutivos (robusto a tipos)
+    def safe_float(val):
+        try:
+            return float(val)
+        except (TypeError, ValueError):
+            return np.nan
+    centroids = [(safe_float(getattr(r, 'centroid_x', np.nan)), safe_float(getattr(r, 'centroid_y', np.nan))) for r in window]
+    steps = [np.linalg.norm(np.subtract(centroids[i+1], centroids[i]))
+             for i in range(len(centroids)-1)
+             if not np.isnan(centroids[i][0]) and not np.isnan(centroids[i][1])
+             and not np.isnan(centroids[i+1][0]) and not np.isnan(centroids[i+1][1])]
     if steps:
         results['window_mean_centroid_step'] = float(np.nanmean(steps))
         results['window_max_centroid_step'] = float(np.nanmax(steps))
