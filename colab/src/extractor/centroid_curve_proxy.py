@@ -22,6 +22,7 @@ class CentroidCurveProxy:
         self.patches_processor_dir = os.path.join(self.base_output_dir, f"patches_processor_{self.patient_id}")
         os.makedirs(self.patches_processor_dir, exist_ok=True)
 
+
     def run_all(self):
         # 1. Cargar imagen y máscara
         extractor = VertebraAutoCentroidExtractor(
@@ -45,16 +46,27 @@ class CentroidCurveProxy:
         df_centroids.to_csv(csv_curve, index=False)
         print(f"Curva de centroides guardada en {csv_curve}")
 
-        # 4. Construir DTOs
-        patch_builder = PatchDTOBuilder()
-        patch_dtos = patch_builder.build_patch_dtos_in_memory(
-            patient_id=patient_id,
-            image=image,
-            mask=mask,
-            boxes=boxes,
-            method="bands",
-            add_overlay=True
-        )
+        # 4. Construir DTOs y guardar imágenes si se solicita
+        patch_builder = PatchDTOBuilder(save_root=self.patches_processor_dir)
+        save_patches = self.config.get("save_patches", False)
+        if save_patches:
+            patch_dtos = patch_builder.build_patch_dtos_on_disk(
+                patient_id=patient_id,
+                image=image,
+                mask=mask,
+                boxes=boxes,
+                method="bands"
+            )
+            print(f"Parches guardados en {self.patches_processor_dir}/patch_images y patch_masks")
+        else:
+            patch_dtos = patch_builder.build_patch_dtos_in_memory(
+                patient_id=patient_id,
+                image=image,
+                mask=mask,
+                boxes=boxes,
+                method="bands",
+                add_overlay=True
+            )
         self.patches = patch_dtos  # Para visualización externa
 
         # 5. Calcular métricas consecutivas (máscara)
