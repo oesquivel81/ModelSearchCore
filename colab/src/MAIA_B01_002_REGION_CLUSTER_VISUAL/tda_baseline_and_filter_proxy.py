@@ -8,10 +8,9 @@ def normalize_filter_names(filter_names):
     if isinstance(filter_names, str):
         return [filter_names]
     try:
-        import pandas as pd
         if isinstance(filter_names, pd.Series):
             return list(filter_names.dropna().unique())
-    except ImportError:
+    except Exception:
         pass
     if isinstance(filter_names, (list, tuple, set)):
         return list({str(f) for f in filter_names if f is not None})
@@ -123,7 +122,6 @@ class TDABaselineAndFilterProxy:
             all_window_rows.extend(window_rows)
             all_summaries.extend(summary)
         # Exportar consolidado global
-        import pandas as pd
         outdir = os.path.join(self.patient_dir, "pre_tda_consolidado")
         os.makedirs(outdir, exist_ok=True)
         for row in all_region_rows:
