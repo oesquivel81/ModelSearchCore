@@ -31,8 +31,7 @@ class TDABaselineAndFilterProxy:
 
     def _load_patches(self, patch_dir):
         # Carga todos los parches como PatchPathDTO usando PatchDTOBuilder
-        from extractor.patch_dto import PatchDTOBuilder
-        builder = PatchDTOBuilder()
+        from extractor.patch_dto import PatchPathDTO
         # Asume que los nombres de los archivos siguen el patrón {patient_id}_patch_{idx:02d}.png
         exts = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp"}
         files = [os.path.join(patch_dir, f) for f in os.listdir(patch_dir) if Path(f).suffix.lower() in exts]
@@ -41,7 +40,7 @@ class TDABaselineAndFilterProxy:
         for f in files:
             patch_id = os.path.splitext(os.path.basename(f))[0]
             patches.append(
-                builder.build_patch_path_dto_from_file(
+                PatchPathDTO(
                     patch_id=patch_id,
                     patient_id=self.patient_id,
                     image_path=f,
