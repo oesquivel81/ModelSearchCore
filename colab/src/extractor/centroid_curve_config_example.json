@@ -6,5 +6,6 @@
   "box_w": 130,
   "box_h": 80,
   "adaptive_width": true,
-  "split": "train"
+  "split": "train",
+  "base_output_dir": "C:/Users/Tavo/ModelSearchCore/colab/src/MAIA_B01_001_BL_ch32_lr3_px30"
 }

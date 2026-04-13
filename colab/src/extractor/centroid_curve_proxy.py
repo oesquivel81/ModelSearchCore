@@ -14,6 +14,14 @@ class CentroidCurveProxy:
         self.box_h = config.get("box_h", 80)
         self.adaptive_width = config.get("adaptive_width", True)
         self.split = config.get("split", "unspecified")
+        # Nuevo: directorio base de salida y subdirectorio por paciente
+        self.base_output_dir = config.get("base_output_dir", ".")
+        self.patient_id = config.get("patient_id")
+        if self.patient_id is None:
+            # Si no viene explícito, lo inferimos del nombre de la imagen
+            self.patient_id = os.path.splitext(os.path.basename(self.img_rel_path))[0]
+        self.patches_processor_dir = os.path.join(self.base_output_dir, f"patches_processor_{self.patient_id}")
+        os.makedirs(self.patches_processor_dir, exist_ok=True)
 
     def run_all(self):
         # 1. Cargar imagen y máscara
@@ -29,12 +37,12 @@ class CentroidCurveProxy:
         centroids = extractor._compute_centroids_by_bands(mask, n_levels=self.n_levels)
         boxes = extractor._boxes_from_centroids(mask, centroids, box_w=self.box_w, box_h=self.box_h, adaptive_width=self.adaptive_width)
 
-        # 3. Guardar curva de centroides en CSV
-        patient_id = os.path.splitext(os.path.basename(self.img_rel_path))[0]
+        # 3. Guardar curva de centroides en CSV en el subdirectorio
+        patient_id = self.patient_id
         df_centroids = pd.DataFrame(centroids)
         df_centroids["split"] = self.split
         df_centroids["patient_id"] = patient_id
-        csv_curve = f"centroid_curve_{patient_id}.csv"
+        csv_curve = os.path.join(self.patches_processor_dir, f"centroid_curve_{patient_id}.csv")
         df_centroids.to_csv(csv_curve, index=False)
         print(f"Curva de centroides guardada en {csv_curve}")
 
