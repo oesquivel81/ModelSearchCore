@@ -14,7 +14,16 @@
   "metrics": [
     "mean_dice",
     "mean_iou",
-    "score_global",
-    "mean_mae_img"
+    "mean_mse_img",
+    "mean_mae_img",
+    "mean_grad_mse",
+    "mean_grad_mae",
+    "mean_var_diff",
+    "mean_intensity_diff"
+  ]
+  ,
+  "filter_names": [
+    "bilateral+laplacian",
+    "median+sobel"
   ]
 }

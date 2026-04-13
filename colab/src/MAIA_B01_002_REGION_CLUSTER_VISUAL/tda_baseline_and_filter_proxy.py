@@ -13,7 +13,11 @@ class TDABaselineAndFilterProxy:
         self.metrics = config["metrics"]
         self.patient_dir = os.path.join(self.tda_root, f"patches_processor_{self.patient_id}", self.patient_id, "bands")
         self.curve_csv = os.path.join(self.tda_root, f"patches_processor_{self.patient_id}", f"centroid_curve_{self.patient_id}.csv")
-        self.filters = self._find_filters()
+        # Si el config tiene 'filter_names', solo usa esos filtros
+        if "filter_names" in config:
+            self.filters = [f for f in self._find_filters() if f in config["filter_names"]]
+        else:
+            self.filters = self._find_filters()
         Path(self.patient_dir).mkdir(parents=True, exist_ok=True)
 
     def _find_filters(self):
