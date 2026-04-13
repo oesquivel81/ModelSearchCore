@@ -135,40 +135,9 @@ class TDABaselineAndFilterProxy:
 
     def _run_tda_for_patches(self, patches, filter_name, curve, config_id):
         from MAIA_B01_002_REGION_CLUSTER_VISUAL import tda_patch_combinations as tda_utils
-        # 1. Convertir PatchPathDTO a RegionRecord y enriquecer con centroides y métricas
+        # 1. Poblar RegionRecord directamente desde el archivo de centroides (con métricas)
         centroid_path = tda_utils.find_centroid_curve_file(self.tda_root, self.patient_id)
-        centroid_df = tda_utils.load_centroid_curve_data(centroid_path, self.patient_id)
-        region_records = []
-        for p in patches:
-            region = self._patch_to_region(p, filter_name, config_id)
-            centroid_row, matched = tda_utils.match_region_with_centroid_row(region, centroid_df)
-            # Enriquecer con centroid_x, centroid_y, vertebra_idx, split, etc.
-            if matched:
-                region.centroid_x = centroid_row['centroid_x']
-                region.centroid_y = centroid_row['centroid_y']
-                region.vertebra_idx = centroid_row['vertebra_idx']
-                region.order_index = centroid_row['vertebra_idx']
-                region.split = centroid_row['split'] if 'split' in centroid_row else None
-                region.metadata = {
-                    "split": centroid_row['split'] if 'split' in centroid_row else None,
-                    "spatial_file_used": centroid_path,
-                    "optional_metadata": {}
-                }
-            else:
-                region.metadata = {
-                    "split": None,
-                    "spatial_file_used": centroid_path,
-                    "optional_metadata": {"centroid_match": False}
-                }
-            # Propagar métricas si existen en patch o centroid_row
-            for m in [
-                'mean_dice', 'mean_iou', 'mean_mse_img', 'mean_mae_img',
-                'mean_grad_mse', 'mean_grad_mae', 'mean_var_diff', 'mean_intensity_diff']:
-                val = getattr(p, m, None)
-                if val is None and matched and m in centroid_row:
-                    val = centroid_row[m]
-                setattr(region, m, val)
-            region_records.append(region)
+        region_records = tda_utils.load_regions_from_centroid_csv(centroid_path, self.patient_id, config_id, filter_name)
         # 2. Ordenar espacialmente
         region_records = tda_utils.sort_regions_for_spatial_windows(region_records)
         # 3. Generar ventanas consecutivas
