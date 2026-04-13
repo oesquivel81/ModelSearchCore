@@ -341,13 +341,21 @@ def evaluate_combination(combo: Tuple[RegionRecord, ...], filter_params: Dict[st
     patient_id = combo[0].patient_id if combo else ''
     config_id = combo[0].config_id if combo else ''
     member_image_paths = [getattr(r, 'image_path', '') for r in combo]
-    member_centroids = [(getattr(r, 'centroid_x', np.nan), getattr(r, 'centroid_y', np.nan)) for r in combo]
-    centroid_y_vals = [c[1] for c in member_centroids if c[1] is not None]
-    centroid_x_vals = [c[0] for c in member_centroids if c[0] is not None]
+    def safe_float(val):
+        try:
+            return float(val)
+        except (TypeError, ValueError):
+            return np.nan
+    member_centroids = [(safe_float(getattr(r, 'centroid_x', np.nan)), safe_float(getattr(r, 'centroid_y', np.nan))) for r in combo]
+    centroid_y_vals = [c[1] for c in member_centroids if not np.isnan(c[1])]
+    centroid_x_vals = [c[0] for c in member_centroids if not np.isnan(c[0])]
     centroid_span_y = float(np.nanmax(centroid_y_vals) - np.nanmin(centroid_y_vals)) if centroid_y_vals else np.nan
     centroid_span_x = float(np.nanmax(centroid_x_vals) - np.nanmin(centroid_x_vals)) if centroid_x_vals else np.nan
     # Distancias entre centroides
-    centroid_distances = [float(np.linalg.norm(np.subtract(member_centroids[i+1], member_centroids[i]))) for i in range(k-1) if not np.isnan(member_centroids[i][0]) and not np.isnan(member_centroids[i+1][0])]
+    centroid_distances = [float(np.linalg.norm(np.subtract(member_centroids[i+1], member_centroids[i])))
+                         for i in range(k-1)
+                         if not np.isnan(member_centroids[i][0]) and not np.isnan(member_centroids[i][1])
+                         and not np.isnan(member_centroids[i+1][0]) and not np.isnan(member_centroids[i+1][1])]
     mean_centroid_distance = float(np.nanmean(centroid_distances)) if centroid_distances else np.nan
     max_centroid_distance = float(np.nanmax(centroid_distances)) if centroid_distances else np.nan
     # Métricas agregadas y relacionales
