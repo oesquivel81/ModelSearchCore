@@ -1,3 +1,21 @@
+def normalize_filter_names(filter_names):
+    """
+    Normaliza filter_names a una lista de strings únicos.
+    Soporta Series, lista, string único, None.
+    """
+    if filter_names is None:
+        return []
+    if isinstance(filter_names, str):
+        return [filter_names]
+    try:
+        import pandas as pd
+        if isinstance(filter_names, pd.Series):
+            return list(filter_names.dropna().unique())
+    except ImportError:
+        pass
+    if isinstance(filter_names, (list, tuple, set)):
+        return list({str(f) for f in filter_names if f is not None})
+    return [str(filter_names)]
 import os
 import pandas as pd
 from pathlib import Path
@@ -34,7 +52,8 @@ class TDABaselineAndFilterProxy:
         self.curve_csv = os.path.join(self.tda_root, f"patches_processor_{self.patient_id}", f"centroid_curve_{self.patient_id}.csv")
         # Si el config tiene 'filter_names', solo usa esos filtros
         if "filter_names" in config:
-            self.filters = [f for f in self._find_filters() if f in config["filter_names"]]
+            clean_filters = normalize_filter_names(config["filter_names"])
+            self.filters = [f for f in self._find_filters() if f in clean_filters]
         else:
             self.filters = self._find_filters()
         Path(self.patient_dir).mkdir(parents=True, exist_ok=True)
@@ -91,8 +110,10 @@ class TDABaselineAndFilterProxy:
             self._run_tda_for_patches(patches, filtro, curve)
 
     def _run_tda_for_patches(self, patches, label, curve):
+        from MAIA_B01_002_REGION_CLUSTER_VISUAL.tda_patch_combinations import sort_regions_for_consecutive_windows
         # Convertir PatchPathDTO a RegionRecord
         region_records = [self._patch_to_region(p) for p in patches]
+        region_records = sort_regions_for_consecutive_windows(region_records)
         combos_raw = generate_patch_combinations(
             region_records,
             min_k=self.restrictions['min_k'],
@@ -103,7 +124,7 @@ class TDABaselineAndFilterProxy:
             evaluate_combination(
                 c,
                 filter_params=None,
-                selection_mode="default",
+                selection_mode="consecutive_windows",
                 experiment_mode="all_patches",
                 restrictions=self.restrictions
             )

@@ -104,43 +104,101 @@ def select_regions(df: pd.DataFrame, mode: str, curve=None, curve_radius=25) -> 
         ))
     return regions
 
-def generate_patch_combinations(regions: List[RegionRecord], min_k=2, max_k=None, max_combination_count=None) -> List[Tuple[int, Tuple[RegionRecord, ...]]]:
+def sort_regions_for_consecutive_windows(regions: List[RegionRecord]) -> List[RegionRecord]:
+    """
+    Ordena regiones por prioridad: order_index > curve_param > region_id (estable).
+    """
+    def region_sort_key(r: RegionRecord):
+        if r.order_index is not None:
+            return (0, r.order_index)
+        elif r.curve_param is not None:
+            return (1, r.curve_param)
+        else:
+            return (2, str(r.region_id))
+    return sorted(regions, key=region_sort_key)
+
+def generate_patch_combinations(
+    regions: List[RegionRecord],
+    min_k: int = 2,
+    max_k: Optional[int] = None,
+    max_combination_count: Optional[int] = None
+) -> List[Tuple[int, Tuple[RegionRecord, ...]]]:
+    """
+    Genera solo ventanas consecutivas de regiones ordenadas.
+    Para cada k en [min_k, max_k], produce ventanas deslizantes de paso 1.
+    El total es sum(n - k + 1 for k in ...), nunca combinaciones arbitrarias.
+    Si max_combination_count está definido, corta el total global.
+    """
     n = len(regions)
     if max_k is None:
         max_k = n
-    all_combos = []
-    for k in range(min_k, max_k+1):
-        combos = list(itertools.combinations(regions, k))
-        if max_combination_count is not None and len(combos) > max_combination_count:
-            combos = combos[:max_combination_count]
-        all_combos.extend([(k, c) for c in combos])
-    return all_combos
+    combos = []
+    count = 0
+    for k in range(min_k, max_k + 1):
+        for i in range(n - k + 1):
+            window = tuple(regions[i:i + k])
+            combos.append((k, window))
+            count += 1
+            if max_combination_count is not None and count >= max_combination_count:
+                return combos
+    return combos
+
+def generate_patch_combinations_lazy(
+    regions: List[RegionRecord],
+    min_k: int = 2,
+    max_k: Optional[int] = None,
+    max_combination_count: Optional[int] = None
+):
+    """
+    Versión generadora (lazy) de ventanas consecutivas.
+    """
+    n = len(regions)
+    if max_k is None:
+        max_k = n
+    count = 0
+    for k in range(min_k, max_k + 1):
+        for i in range(n - k + 1):
+            window = tuple(regions[i:i + k])
+            yield (k, window)
+            count += 1
+            if max_combination_count is not None and count >= max_combination_count:
+                return
 
 def evaluate_combination(combo: Tuple[RegionRecord, ...], filter_params: Dict[str, Any], selection_mode: str, experiment_mode: str, restrictions: Dict[str, Any]) -> CombinationRecord:
     # Dummy logic for geometric/topological properties
     k = len(combo)
     member_region_ids = [r.region_id for r in combo]
+    # Determinar si son realmente consecutivos en el orden
+    order_indices = [r.order_index for r in combo]
+    is_contiguous_in_order = all(
+        (order_indices[i] is not None and order_indices[i+1] is not None and order_indices[i+1] - order_indices[i] == 1)
+        for i in range(k-1)
+    ) if all(r.order_index is not None for r in combo) else True  # Si no hay order_index, asumimos True
+
     member_indices = list(range(k))
     filter_name = combo[0].filter_name if combo else ''
     patient_id = combo[0].patient_id if combo else ''
     config_id = combo[0].config_id if combo else ''
-    # Example: compute union/intersection of bboxes, etc.
     bbox_union = None
     bbox_intersection = None
     intersection_area = 0.0
     overlap_ratio = 0.0
     centroid_distances = [0.0] * k
     curve_params = [r.curve_param for r in combo]
-    order_indices = [r.order_index for r in combo]
     curve_span = 0.0
-    is_contiguous_in_order = True
-    is_curve_consistent = True
-    is_valid_simplex = True
-    validity_reason = 'valid' if is_valid_simplex else 'invalid'
-    rejection_reason = None if is_valid_simplex else 'rejected by restriction'
     simplex_dim = k-1
-    # Evaluate restrictions here and set flags/fields
-    # ...
+    # Validación de simplex: por ahora, solo por orden, dejar trazabilidad
+    if is_contiguous_in_order:
+        # Aquí se podría validar intersección real si hay datos geométricos
+        # Por ahora, solo dejamos trazabilidad
+        is_valid_simplex = False
+        validity_reason = "pending_geometric_validation"
+        rejection_reason = None
+    else:
+        is_valid_simplex = False
+        validity_reason = "rejected_nonconsecutive"
+        rejection_reason = "regiones no consecutivas"
+
     return CombinationRecord(
         combination_id='|'.join(member_region_ids),
         patient_id=patient_id,
@@ -160,9 +218,9 @@ def evaluate_combination(combo: Tuple[RegionRecord, ...], filter_params: Dict[st
         centroid_distances=centroid_distances,
         curve_span=curve_span,
         is_contiguous_in_order=is_contiguous_in_order,
-        is_curve_consistent=is_curve_consistent,
+        is_curve_consistent=True,
         is_valid_simplex=is_valid_simplex,
-        selection_mode=selection_mode,
+        selection_mode="consecutive_windows",
         experiment_mode=experiment_mode,
         validity_reason=validity_reason,
         rejection_reason=rejection_reason,
