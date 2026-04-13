@@ -49,8 +49,19 @@ class CentroidCurveProxy:
         # 4. Construir DTOs y guardar imágenes si se solicita
         patch_builder = PatchDTOBuilder(save_root=self.patches_processor_dir)
         save_patches = self.config.get("save_patches", False)
+        # Siempre construye los parches en memoria para métricas y visualización
+        patch_dtos = patch_builder.build_patch_dtos_in_memory(
+            patient_id=patient_id,
+            image=image,
+            mask=mask,
+            boxes=boxes,
+            method="bands",
+            add_overlay=True
+        )
+        self.patches = patch_dtos  # Para visualización externa
+        # Si se solicita, también guarda los parches en disco
         if save_patches:
-            patch_dtos = patch_builder.build_patch_dtos_on_disk(
+            patch_builder.build_patch_dtos_on_disk(
                 patient_id=patient_id,
                 image=image,
                 mask=mask,
@@ -58,16 +69,6 @@ class CentroidCurveProxy:
                 method="bands"
             )
             print(f"Parches guardados en {self.patches_processor_dir}/patch_images y patch_masks")
-        else:
-            patch_dtos = patch_builder.build_patch_dtos_in_memory(
-                patient_id=patient_id,
-                image=image,
-                mask=mask,
-                boxes=boxes,
-                method="bands",
-                add_overlay=True
-            )
-        self.patches = patch_dtos  # Para visualización externa
 
         # 5. Calcular métricas consecutivas (máscara)
         metrics = PatchMetrics(kernel_size=3, hausdorff_use_edges=True)
