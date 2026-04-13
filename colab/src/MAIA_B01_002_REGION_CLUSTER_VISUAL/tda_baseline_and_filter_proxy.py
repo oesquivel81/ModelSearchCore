@@ -135,78 +135,92 @@ class TDABaselineAndFilterProxy:
 
     def _run_tda_for_patches(self, patches, filter_name, curve, config_id):
         from MAIA_B01_002_REGION_CLUSTER_VISUAL import tda_patch_combinations as tda_utils
+        from MAIA_B01_002_REGION_CLUSTER_VISUAL.pre_tda_metrics_builder import PreTDAMetricsBuilder
+        import numpy as np
+        import pandas as pd
         # 1. Poblar RegionRecord directamente desde el archivo de centroides (con métricas)
         centroid_path = tda_utils.find_centroid_curve_file(self.tda_root, self.patient_id)
         region_records = tda_utils.load_regions_from_centroid_csv(centroid_path, self.patient_id, config_id, filter_name)
         # 2. Ordenar espacialmente
         region_records = tda_utils.sort_regions_for_spatial_windows(region_records)
-        # 3. Generar ventanas consecutivas
+        # 3. Validar y mostrar muestra de regiones enriquecidas
+        print(f"[VALIDACIÓN] Muestra de regiones para filtro '{filter_name}':")
+        for r in region_records[:min(5, len(region_records))]:
+            print({
+                'region_id': r.region_id,
+                'image_path': r.image_path,
+                'patient_id': r.patient_id,
+                'config_id': r.config_id,
+                'filter_name': r.filter_name,
+                'centroid': (r.centroid_x, r.centroid_y),
+                'order_index': r.order_index,
+                'mean_dice': getattr(r, 'mean_dice', None),
+                'mean_iou': getattr(r, 'mean_iou', None)
+            })
+        # 4. Generar ventanas consecutivas
         combos_raw = tda_utils.generate_patch_combinations(
             region_records,
             min_k=self.restrictions['min_k'],
             max_k=self.restrictions['max_k'],
             max_combination_count=self.restrictions['max_combination_count']
         )
-        # 4. Calcular métricas agregadas y relacionales por ventana
-        combo_records = [
-            tda_utils.evaluate_combination(
+        # 5. Evaluar combinaciones y construir validity_records
+        combo_records = []
+        windows = []
+        validity_records = []
+        for _, c in combos_raw:
+            eval_result = tda_utils.evaluate_combination(
                 c,
                 filter_params=None,
                 selection_mode="consecutive_windows",
                 experiment_mode="all_patches",
                 restrictions=self.restrictions
             )
-            for _, c in combos_raw
-        ]
-        # 5. Exportar reportes previos y CSV maestro único
+            combo_records.append(eval_result)
+            windows.append(list(c))
+            validity_records.append({
+                'combination_id': eval_result.combination_id,
+                'is_valid_simplex': eval_result.is_valid_simplex,
+                'validity_reason': eval_result.validity_reason,
+                'rejection_reason': eval_result.rejection_reason
+            })
+        # 6. Validar y mostrar muestra de ventanas
+        print(f"[VALIDACIÓN] Muestra de ventanas para filtro '{filter_name}':")
+        for i, (w, v) in enumerate(zip(windows, validity_records)):
+            if i >= min(3, len(windows)):
+                break
+            print({
+                'combination_id': v['combination_id'],
+                'member_region_ids': [r.region_id for r in w],
+                'member_image_paths': [r.image_path for r in w],
+                'k': len(w),
+                'filter_name': getattr(w[0], 'filter_name', None),
+                'mean_dice': np.nanmean([getattr(r, 'mean_dice', np.nan) for r in w]),
+                'mean_iou': np.nanmean([getattr(r, 'mean_iou', np.nan) for r in w])
+            })
+        # 7. Usar PreTDAMetricsBuilder para construir y exportar reportes
+        prefix = f"{self.patient_id}_{filter_name}"
         outdir = os.path.join(self.patient_dir, f"pre_tda_{filter_name}")
         os.makedirs(outdir, exist_ok=True)
-        # a) Reporte de regiones
-        region_rows = [r.__dict__.copy() for r in region_records]
-        # b) Reporte de ventanas
-        window_rows = []
-        for w in combo_records:
-            row = w.__dict__.copy()
-            # Aplanar window_metrics y window_relational_metrics
-            if 'window_metrics' in row and isinstance(row['window_metrics'], dict):
-                row.update(row.pop('window_metrics'))
-            if 'window_relational_metrics' in row and isinstance(row['window_relational_metrics'], dict):
-                row.update(row.pop('window_relational_metrics'))
-            window_rows.append(row)
-        # c) Reporte resumen
-        summary = [{
-            "patient_id": self.patient_id,
-            "config_id": config_id,
-            "filter_name": filter_name,
-            "num_regions": len(region_records),
-            "num_windows": len(window_rows),
-            "num_valid_simplices": sum(1 for w in combo_records if w.is_valid_simplex),
-            "k_min": self.restrictions['min_k'],
-            "k_max": self.restrictions['max_k'],
-            "ordering_source": "vertebra_idx",
-            "spatial_file_used": centroid_path
-        }]
-        # d) Reporte de trazabilidad espacial
-        spatial = [
-            {
-                "region_id": r.region_id,
-                "image_path": r.image_path,
-                "patient_id": r.patient_id,
-                "vertebra_idx": r.vertebra_idx,
-                "centroid_x": r.centroid_x,
-                "centroid_y": r.centroid_y,
-                "split": r.split,
-                "config_id": r.config_id,
-                "filter_name": r.filter_name
-            } for r in region_records
-        ]
-        # e) Exportar reportes previos
-        tda_utils.export_pre_tda_reports(region_rows, window_rows, summary, spatial, outdir)
-        # f) Exportar CSV maestro único
-        for row in region_rows:
-            row['record_level'] = 'region'
-        for row in window_rows:
-            row['record_level'] = 'window'
-        tda_utils.export_master_pre_tda_table(region_rows, window_rows, outdir)
-        print(f"Reportes previos a TDA y CSV maestro exportados en {outdir}")
-        return region_rows, window_rows, summary
+        metrics_builder = PreTDAMetricsBuilder(
+            metric_columns=[
+                "mean_dice", "mean_iou", "mean_mse_img", "mean_mae_img",
+                "mean_grad_mse", "mean_grad_mae", "mean_var_diff", "mean_intensity_diff"
+            ],
+            selection_mode="spatial_consecutive_windows",
+            ordering_source="vertebra_idx",
+            spatial_file_used=centroid_path
+        )
+        regions_df = metrics_builder.build_regions_dataframe(region_records)
+        windows_df = metrics_builder.build_windows_dataframe(windows, validity_records)
+        summary_df = metrics_builder.build_summary_dataframe(regions_df, windows_df)
+        paths = metrics_builder.export_all(
+            output_dir=outdir,
+            regions_df=regions_df,
+            windows_df=windows_df,
+            summary_df=summary_df,
+            prefix=prefix
+        )
+        print(f"[EXPORT] Reportes previos a TDA y CSV maestro exportados en {outdir}")
+        print(f"[EXPORT] Archivos generados: {paths}")
+        return regions_df.to_dict(orient='records'), windows_df.to_dict(orient='records'), summary_df.to_dict(orient='records')

@@ -132,18 +132,66 @@ def load_regions_from_centroid_csv(csv_path: str, patient_id: str, config_id: st
     Lee el archivo centroid_curve_<patient_id>.csv y construye RegionRecord para cada fila.
     Espera columnas: vertebra_idx, centroid_x, centroid_y, split, image_path
     """
+    import os
     df = pd.read_csv(csv_path)
     regions = []
+    # Try to find patch_images_{filter_name} directory
+    patch_dir = None
+    if filter_name and filter_name != "baseline":
+        patch_dir = os.path.join(os.path.dirname(os.path.dirname(csv_path)), patient_id, "bands", f"patch_images_{filter_name}")
+    else:
+        patch_dir = os.path.join(os.path.dirname(os.path.dirname(csv_path)), patient_id, "bands", "patch_images")
+
+    # Try to find metrics CSV (optional)
+    metrics_csv = os.path.join(os.path.dirname(csv_path), f"top_por_cluster_{patient_id}.csv")
+    metrics_df = None
+    if os.path.exists(metrics_csv):
+        metrics_df = pd.read_csv(metrics_csv)
+
+    # Build a mapping from vertebra_idx to image_path
+    image_map = {}
+    if os.path.exists(patch_dir):
+        for fname in os.listdir(patch_dir):
+            if fname.endswith(('.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff', '.webp')):
+                # Expecting {patient_id}_patch_{idx:02d}.png
+                parts = fname.split('_patch_')
+                if len(parts) == 2:
+                    idx_part = parts[1].split('.')[0]
+                    try:
+                        idx = int(idx_part)
+                        image_map[idx] = os.path.join(patch_dir, fname)
+                    except Exception:
+                        pass
+
+    # Build a mapping from vertebra_idx to metrics (if available)
+    metrics_map = {}
+    if metrics_df is not None and 'vertebra_idx' in metrics_df.columns:
+        for _, mrow in metrics_df.iterrows():
+            idx = mrow.get('vertebra_idx', None)
+            if idx is not None:
+                metrics_map[idx] = mrow
+
     for _, row in df.iterrows():
+        idx = row.get("vertebra_idx", None)
+        image_path = image_map.get(idx, "")
+        metrics = metrics_map.get(idx, {})
         regions.append(RegionRecord(
-            region_id = str(row.get("vertebra_idx", "")),
+            region_id = str(idx),
             patient_id = patient_id,
             config_id = config_id,
             filter_name = filter_name,
-            image_path = row.get("image_path", ""),
-            vertebra_idx = row.get("vertebra_idx", None),
+            image_path = image_path,
+            vertebra_idx = idx,
             centroid_x = row.get("centroid_x", None),
             centroid_y = row.get("centroid_y", None),
+            mean_dice = metrics.get("mean_dice", None) if metrics is not None else None,
+            mean_iou = metrics.get("mean_iou", None) if metrics is not None else None,
+            mean_mse_img = metrics.get("mean_mse_img", None) if metrics is not None else None,
+            mean_mae_img = metrics.get("mean_mae_img", None) if metrics is not None else None,
+            mean_grad_mse = metrics.get("mean_grad_mse", None) if metrics is not None else None,
+            mean_grad_mae = metrics.get("mean_grad_mae", None) if metrics is not None else None,
+            mean_var_diff = metrics.get("mean_var_diff", None) if metrics is not None else None,
+            mean_intensity_diff = metrics.get("mean_intensity_diff", None) if metrics is not None else None,
             use_variance = None,
             variance_mode = None,
             patch_size = None,
@@ -152,7 +200,7 @@ def load_regions_from_centroid_csv(csv_path: str, patient_id: str, config_id: st
             bbox = None,
             centroid = (row.get("centroid_x", None), row.get("centroid_y", None)),
             curve_param = None,
-            order_index = row.get("vertebra_idx", None),
+            order_index = idx,
             lives_near_curve = None,
             split = row.get("split", None),
             metadata = {"optional_metadata": {}}
