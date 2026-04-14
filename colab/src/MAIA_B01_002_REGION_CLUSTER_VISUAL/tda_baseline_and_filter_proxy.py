@@ -183,9 +183,6 @@ class TDABaselineAndFilterProxy:
         )
         patch_folders = df['patch_images_path'].tolist()
 
-        # --- Ejemplo de uso ---
-        proxy = TDABaselineAndFilterProxy(config, patch_folders=patch_folders)
-        proxy.run()
 
     def _find_filters(self):
         # Busca subcarpetas de filtros en la ruta real de imágenes
