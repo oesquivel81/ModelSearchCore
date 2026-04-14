@@ -5,6 +5,7 @@ import pandas as pd
 from pathlib import Path
 from MAIA_B01_002_REGION_CLUSTER_VISUAL.tda_patch_combinations import generate_patch_combinations, evaluate_combination, ExperimentBundle, export_experiment_bundle
 
+
 def normalize_filter_names(filter_names):
     """
     Normaliza filter_names a una lista de strings únicos.
