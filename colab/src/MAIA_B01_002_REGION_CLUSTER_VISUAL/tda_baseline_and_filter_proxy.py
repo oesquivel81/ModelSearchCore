@@ -230,12 +230,37 @@ class TDABaselineAndFilterProxy:
 
         for filtro in self.filters:
             print(f"[DEBUG] Procesando filtro: '{filtro}'")
-            patch_dir = os.path.join(self.patient_dir, f"patch_images_{filtro}")
-            print(f"[DEBUG] Ruta esperada de imágenes para filtro '{filtro}': {patch_dir}")
-            config_id = filtro
-            if not os.path.exists(patch_dir):
-                print(f"[SKIP] No existe carpeta de parches para filtro: {filtro} -> {patch_dir}")
+            # Construir nombre esperado de carpeta según la tabla
+            # Asume que tienes un DataFrame df_metrics cargado con las columnas correctas
+            try:
+                df_metrics = pd.read_csv(os.path.join(self.tda_root, f"patches_processor_{self.patient_id}", f"master_config_metrics_{self.patient_id}.csv"))
+            except Exception as e:
+                print(f"[ERROR] No se pudo cargar el CSV maestro de métricas: {e}")
                 continue
+            # Buscar la fila correspondiente al filtro actual
+            filtro_row = df_metrics[df_metrics['filter_name'] == filtro]
+            if filtro_row.empty:
+                print(f"[ERROR] No se encontró configuración en la tabla para filtro: {filtro}")
+                continue
+            row = filtro_row.iloc[0]
+            # Construir nombre esperado
+            use_variance = str(row['use_variance']).capitalize()
+            variance_mode = str(row['variance_mode']).lower()
+            patch_size = row['patch_size'] if isinstance(row['patch_size'], str) else str(row['patch_size'])
+            stride = str(row['stride'])
+            variance_kernel = str(row['variance_kernel'])
+            expected_folder = f"Var-{use_variance}_mode-{variance_mode}_pk-{patch_size}_st-{stride}_vk-{variance_kernel}"
+            patch_folder = f"patch_images_{expected_folder}"
+            filters_dir = os.path.join(self.tda_root, self.patient_id)
+            expected_path = os.path.join(filters_dir, patch_folder)
+            print(f"[VALIDACIÓN] Buscando carpeta esperada para filtro '{filtro}': {patch_folder}")
+            if os.path.exists(expected_path):
+                print(f"[OK] Carpeta encontrada: {expected_path}")
+            else:
+                print(f"[ERROR] Carpeta NO encontrada: {expected_path}")
+                continue
+            patch_dir = expected_path
+            config_id = filtro
             patches = self._load_patches(patch_dir)
             print(f"[INICIO] Procesando filtro {filtro}: {len(patches)} imágenes encontradas en {patch_dir}")
             for p in patches:
