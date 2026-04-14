@@ -76,12 +76,21 @@ class TDABaselineAndFilterProxy:
         Path(self.patient_dir).mkdir(parents=True, exist_ok=True)
 
     def _find_filters(self):
-        # Busca subcarpetas patch_images_{filtro} en bands
-        bands_dir = os.path.join(self.tda_root, f"patches_processor_{self.patient_id}", self.patient_id, "bands")
+        # Busca subcarpetas de filtros en la ruta real de imágenes
+        filters_dir = os.path.join(self.tda_root, self.patient_id)
+        print(f"[DEBUG] Carpeta de búsqueda de filtros: {filters_dir}")
+        try:
+            contenido = os.listdir(filters_dir)
+            print(f"[DEBUG] Contenido de la carpeta de filtros:")
+            for item in contenido:
+                print(f"    - {item}")
+        except Exception as e:
+            print(f"[ERROR] No se pudo listar la carpeta de filtros: {e}")
+            return []
         filters = []
-        for d in os.listdir(bands_dir):
-            if d.startswith("patch_images_"):
-                filters.append(d.replace("patch_images_", ""))
+        for d in contenido:
+            if os.path.isdir(os.path.join(filters_dir, d)):
+                filters.append(d)
         return filters
 
     def _load_patches(self, patch_dir):
@@ -220,13 +229,17 @@ class TDABaselineAndFilterProxy:
             print(f"[EXPORT] Guardado en {output_dir}: canvas.npy, valid_mask.npy, region_table.csv, adjacency_table.csv")
 
         for filtro in self.filters:
+            print(f"[DEBUG] Procesando filtro: '{filtro}'")
             patch_dir = os.path.join(self.patient_dir, f"patch_images_{filtro}")
+            print(f"[DEBUG] Ruta esperada de imágenes para filtro '{filtro}': {patch_dir}")
             config_id = filtro
             if not os.path.exists(patch_dir):
                 print(f"[SKIP] No existe carpeta de parches para filtro: {filtro} -> {patch_dir}")
                 continue
             patches = self._load_patches(patch_dir)
             print(f"[INICIO] Procesando filtro {filtro}: {len(patches)} imágenes encontradas en {patch_dir}")
+            for p in patches:
+                print(f"[IMAGEN] {p.image_path}")
             # --- INTEGRACIÓN CANVAS Y MÉTRICAS ---
             output_dir = os.path.join(reportes_dir, f"pre_tda_{filtro}")
             centroid_csv = self.curve_csv
