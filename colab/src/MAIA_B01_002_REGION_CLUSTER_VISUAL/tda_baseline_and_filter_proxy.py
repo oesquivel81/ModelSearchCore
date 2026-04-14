@@ -30,7 +30,7 @@ class TDABaselineAndFilterProxy:
         patch_images_plot_config: dict opcional con claves como unique_only, show_plot, images_per_folder, max_folders_to_plot
         """
         config = dict(self.config)
-        config['csv_path'] = os.path.join(self.tda_root, f"patches_processor_{self.patient_id}", f"master_config_metrics_{self.patient_id}.csv")
+        config['csv_path'] = os.path.join(self.tda_root, f"master_config_metrics_{self.patient_id}.csv")
         if patch_images_plot_config:
             config['patch_images_plot_config'] = patch_images_plot_config
         patch_folders = build_patch_images_paths_from_csv(config)
