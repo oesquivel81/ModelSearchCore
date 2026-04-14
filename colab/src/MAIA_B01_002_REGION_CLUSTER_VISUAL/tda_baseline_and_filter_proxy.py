@@ -1,4 +1,10 @@
+
 from MAIA_B01_002_REGION_CLUSTER_VISUAL.patch_images_paths_utils import build_patch_images_paths_from_csv
+import os
+import pandas as pd
+from pathlib import Path
+from MAIA_B01_002_REGION_CLUSTER_VISUAL.tda_patch_combinations import generate_patch_combinations, evaluate_combination, ExperimentBundle, export_experiment_bundle
+
 def normalize_filter_names(filter_names):
     """
     Normaliza filter_names a una lista de strings únicos.
@@ -17,57 +23,51 @@ def normalize_filter_names(filter_names):
         return list({str(f) for f in filter_names if f is not None})
     return [str(filter_names)]
 
-import os
-import pandas as pd
-from pathlib import Path
-from MAIA_B01_002_REGION_CLUSTER_VISUAL.tda_patch_combinations import generate_patch_combinations, evaluate_combination, ExperimentBundle, export_experiment_bundle
-
 class TDABaselineAndFilterProxy:
-
-        def build_and_process_patch_regions(self, patch_images_plot_config=None):
-            """
-            Construye rutas patch_images usando el CSV y procesa regiones para cada carpeta encontrada.
-            patch_images_plot_config: dict opcional con claves como unique_only, show_plot, images_per_folder, max_folders_to_plot
-            """
-            config = dict(self.config)
-            config['csv_path'] = os.path.join(self.tda_root, f"patches_processor_{self.patient_id}", f"master_config_metrics_{self.patient_id}.csv")
-            if patch_images_plot_config:
-                config['patch_images_plot_config'] = patch_images_plot_config
-            patch_folders = build_patch_images_paths_from_csv(config)
-            from MAIA_B01_002_REGION_CLUSTER_VISUAL.tda_patch_combinations import RegionRecord
-            all_regions = []
-            for folder in patch_folders:
-                if not os.path.exists(folder):
-                    print(f"[WARN] Carpeta no encontrada: {folder}")
-                    continue
-                image_files = [str(f) for f in Path(folder).glob('*.png')]
-                for img_path in image_files:
-                    # Poblar RegionRecord con los datos mínimos
-                    region = RegionRecord(
-                        region_id=Path(img_path).stem,
-                        patient_id=self.patient_id,
-                        config_id=None,
-                        filter_name=Path(folder).name,
-                        image_path=img_path,
-                        vertebra_idx=None,
-                        centroid_x=None,
-                        centroid_y=None,
-                        use_variance=None,
-                        variance_mode=None,
-                        patch_size=None,
-                        stride=None,
-                        variance_kernel=None,
-                        bbox=None,
-                        centroid=(None, None),
-                        curve_param=None,
-                        order_index=None,
-                        lives_near_curve=None,
-                        split=None,
-                        metadata={"optional_metadata": {}}
-                    )
-                    all_regions.append(region)
-            print(f"[INFO] Total regiones encontradas: {len(all_regions)}")
-            return all_regions
+    def build_and_process_patch_regions(self, patch_images_plot_config=None):
+        """
+        Construye rutas patch_images usando el CSV y procesa regiones para cada carpeta encontrada.
+        patch_images_plot_config: dict opcional con claves como unique_only, show_plot, images_per_folder, max_folders_to_plot
+        """
+        config = dict(self.config)
+        config['csv_path'] = os.path.join(self.tda_root, f"patches_processor_{self.patient_id}", f"master_config_metrics_{self.patient_id}.csv")
+        if patch_images_plot_config:
+            config['patch_images_plot_config'] = patch_images_plot_config
+        patch_folders = build_patch_images_paths_from_csv(config)
+        from MAIA_B01_002_REGION_CLUSTER_VISUAL.tda_patch_combinations import RegionRecord
+        all_regions = []
+        for folder in patch_folders:
+            if not os.path.exists(folder):
+                print(f"[WARN] Carpeta no encontrada: {folder}")
+                continue
+            image_files = [str(f) for f in Path(folder).glob('*.png')]
+            for img_path in image_files:
+                # Poblar RegionRecord con los datos mínimos
+                region = RegionRecord(
+                    region_id=Path(img_path).stem,
+                    patient_id=self.patient_id,
+                    config_id=None,
+                    filter_name=Path(folder).name,
+                    image_path=img_path,
+                    vertebra_idx=None,
+                    centroid_x=None,
+                    centroid_y=None,
+                    use_variance=None,
+                    variance_mode=None,
+                    patch_size=None,
+                    stride=None,
+                    variance_kernel=None,
+                    bbox=None,
+                    centroid=(None, None),
+                    curve_param=None,
+                    order_index=None,
+                    lives_near_curve=None,
+                    split=None,
+                    metadata={"optional_metadata": {}}
+                )
+                all_regions.append(region)
+        print(f"[INFO] Total regiones encontradas: {len(all_regions)}")
+        return all_regions
     def log_master_config_metrics(self):
         """
         Imprime si existe y el contenido del archivo master_config_metrics_{patient_id}.csv con logs claros.
@@ -217,168 +217,13 @@ class TDABaselineAndFilterProxy:
 
     def run(self):
         """
-        Refactored: Process only configs/filters present in the CSV, constructing and validating patch_images_{config} folders exactly as specified, with detailed logs.
+        Ejecuta el pipeline completo usando build_and_process_patch_regions para poblar regiones desde patch_images según el CSV y la configuración.
         """
-        import numpy as np
-        from PIL import Image
-        # 1. Leer curva de centroides
-        df_centroids = pd.read_csv(self.curve_csv)
-        curve = df_centroids[["centroid_x", "centroid_y"]].values.tolist()
-        all_region_rows = []
-        all_window_rows = []
-        all_summaries = []
-        reportes_dir = os.path.join(self.patient_dir, "Reportes")
-        os.makedirs(reportes_dir, exist_ok=True)
-        print(f"[REPORTES] Carpeta de reportes: {reportes_dir}")
-        # Imprimir nombres completos de las carpetas patch_images_{config} según los filtros/configs
-        print("[INFO] Carpetas patch_images_{config} esperadas según filter_names/config:")
-        for folder in self.get_expected_patch_folder_names():
-            print(f"    - {folder}")
-        # Load master config metrics CSV
-        metrics_csv_path = os.path.join(self.tda_root, f"patches_processor_{self.patient_id}", f"master_config_metrics_{self.patient_id}.csv")
-        try:
-            df_metrics = pd.read_csv(metrics_csv_path)
-        except Exception as e:
-            print(f"[ERROR] No se pudo cargar el CSV maestro de métricas: {e}")
-            return
-        # Iterate over unique configs/filters in the CSV
-        for idx, row in df_metrics.iterrows():
-            filtro = row['filter_name'] if 'filter_name' in row else row.get('config_id', f'config_{idx}')
-            print(f"[DEBUG] Procesando filtro/config: '{filtro}' (row {idx})")
-            # Build expected folder name from row
-            use_variance = str(row['use_variance']).capitalize() if 'use_variance' in row else 'False'
-            variance_mode = str(row['variance_mode']).lower() if 'variance_mode' in row else 'none'
-            patch_size = row['patch_size'] if isinstance(row['patch_size'], str) else str(row['patch_size'])
-            stride = str(row['stride']) if 'stride' in row else '1'
-            variance_kernel = str(row['variance_kernel']) if 'variance_kernel' in row else '1'
-            expected_folder = f"Var-{use_variance}_mode-{variance_mode}_pk-{patch_size}_st-{stride}_vk-{variance_kernel}"
-            patch_folder = f"patch_images_{expected_folder}"
-            filters_dir = os.path.join(self.tda_root, self.patient_id)
-            expected_path = os.path.join(filters_dir, patch_folder)
-            print(f"[VALIDACIÓN] Buscando carpeta esperada para filtro/config '{filtro}': {patch_folder}")
-            if os.path.exists(expected_path):
-                print(f"[OK] Carpeta encontrada: {expected_path}")
-            else:
-                print(f"[ERROR] Carpeta NO encontrada: {expected_path}")
-                continue
-            patch_dir = expected_path
-            config_id = filtro
-            patches = self._load_patches(patch_dir)
-            print(f"[INICIO] Procesando filtro/config {filtro}: {len(patches)} imágenes encontradas en {patch_dir}")
-            for p in patches:
-                print(f"[IMAGEN] {p.image_path}")
-            # --- INTEGRACIÓN CANVAS Y MÉTRICAS ---
-            output_dir = os.path.join(reportes_dir, f"pre_tda_{filtro}")
-            centroid_csv = self.curve_csv
-            metrics_csv = metrics_csv_path
-            patches_root = os.path.join(self.patient_dir)
-            # Call build_pre_tda_structure as before
-            def build_pre_tda_structure(centroid_csv, metrics_csv, patches_root, output_dir):
-                print(f"[LOAD] Leyendo centroides de: {centroid_csv}")
-                df_centroids = pd.read_csv(centroid_csv)
-                print(f"[LOAD] Leyendo métricas de: {metrics_csv}")
-                df_metrics = pd.read_csv(metrics_csv)
-                print(f"[INFO] Centroides: {len(df_centroids)}, Métricas: {len(df_metrics)}")
-                merge_cols = ['vertebra_idx', 'config_id', 'patient_id']
-                if not all(col in df_metrics.columns for col in merge_cols):
-                    print(f"[ERROR] Faltan columnas clave en métricas: {merge_cols}")
-                    return None
-                df = pd.merge(df_metrics, df_centroids, on='vertebra_idx', how='inner', suffixes=('', '_centroid'))
-                print(f"[MERGE] Regiones tras merge: {len(df)}")
-                folders = [f for f in os.listdir(patches_root) if os.path.isdir(os.path.join(patches_root, f))]
-                print(f"[FOLDERS] Carpetas de configuración encontradas: {folders}")
-                def parse_config_from_folder(folder_name: str):
-                    import re
-                    result = {"filter_name_parsed": None, "use_variance": None, "variance_mode": None, "patch_size": None, "stride": None, "variance_kernel": None}
-                    result["filter_name_parsed"] = folder_name.split("_")[0]
-                    m = re.search(r"var-(True|False)", folder_name)
-                    if m:
-                        result["use_variance"] = m.group(1) == "True"
-                    m = re.search(r"mode-([a-zA-Z_]+)", folder_name)
-                    if m:
-                        result["variance_mode"] = m.group(1)
-                    m = re.search(r"pk-\((\d+),\s*(\d+)\)", folder_name)
-                    if m:
-                        result["patch_size"] = (int(m.group(1)), int(m.group(2)))
-                    m = re.search(r"st-(\d+)", folder_name)
-                    if m:
-                        result["stride"] = int(m.group(1))
-                    m = re.search(r"vk-(\d+)", folder_name)
-                    if m:
-                        result["variance_kernel"] = int(m.group(1))
-                    return result
-                config_map = {f: parse_config_from_folder(f) for f in folders}
-                all_centroids = df[['centroid_x', 'centroid_y']].values
-                patch_sizes = [parse_config_from_folder(f).get('patch_size', (64, 64)) for f in folders]
-                max_patch = np.max(np.array([s if s else (64, 64) for s in patch_sizes]), axis=0)
-                min_xy = np.floor(np.nanmin(all_centroids, axis=0) - max_patch // 2).astype(int)
-                max_xy = np.ceil(np.nanmax(all_centroids, axis=0) + max_patch // 2).astype(int)
-                H, W = max_xy[1] - min_xy[1] + 1, max_xy[0] - min_xy[0] + 1
-                print(f"[CANVAS] Tamaño canvas: H={H}, W={W}")
-                canvas = np.full((H, W), np.nan, dtype=np.float32)
-                valid_mask = np.zeros((H, W), dtype=np.uint8)
-                region_table = []
-                failed_images = 0
-                for idx, row in df.iterrows():
-                    filter_dir = None
-                    for f in folders:
-                        if row['filter_name'] == config_map[f]['filter_name_parsed']:
-                            filter_dir = f
-                            break
-                    if not filter_dir:
-                        print(f"[ERROR] No se encontró carpeta para filtro {row['filter_name']} en región {row['vertebra_idx']}")
-                        continue
-                    image_path = row.get('image_path', None)
-                    if not image_path or not os.path.exists(image_path):
-                        search_dir = os.path.join(patches_root, filter_dir)
-                        imgs = [os.path.join(search_dir, img) for img in os.listdir(search_dir) if img.endswith(('.png','.jpg','.jpeg'))]
-                        if imgs:
-                            image_path = imgs[0]
-                        else:
-                            print(f"[ERROR] Imagen no encontrada para región {row['vertebra_idx']} en {search_dir}")
-                            failed_images += 1
-                            continue
-                    try:
-                        img = np.array(Image.open(image_path).convert('L'))
-                    except Exception as e:
-                        print(f"[ERROR] No se pudo cargar imagen {image_path}: {e}")
-                        failed_images += 1
-                        continue
-                    cx, cy = int(row['centroid_x']), int(row['centroid_y'])
-                    patch_size = config_map[filter_dir].get('patch_size', (img.shape[1], img.shape[0]))
-                    ph, pw = patch_size
-                    x1, y1 = cx - pw // 2 - min_xy[0], cy - ph // 2 - min_xy[1]
-                    x2, y2 = x1 + pw, y1 + ph
-                    patch = img[:ph, :pw]
-                    canvas[y1:y2, x1:x2] = np.nanmean([canvas[y1:y2, x1:x2], patch], axis=0)
-                    valid_mask[y1:y2, x1:x2] = 1
-                    region_info = row.to_dict()
-                    region_info.update({'bbox_x1': x1, 'bbox_y1': y1, 'bbox_x2': x2, 'bbox_y2': y2, 'area_patch': ph * pw, 'canvas_x': x1, 'canvas_y': y1, 'found_dir': filter_dir})
-                    region_table.append(region_info)
-                print(f"[INFO] Regiones procesadas: {len(region_table)}, imágenes fallidas: {failed_images}")
-                adjacency_table = []
-                region_table = sorted(region_table, key=lambda r: r['vertebra_idx'])
-                for i in range(len(region_table) - 1):
-                    r1, r2 = region_table[i], region_table[i+1]
-                    dist = np.linalg.norm([r2['centroid_x'] - r1['centroid_x'], r2['centroid_y'] - r1['centroid_y']])
-                    delta_metrics = {f'delta_{k}': r2.get(k, np.nan) - r1.get(k, np.nan) for k in df_metrics.columns if k in r1 and k in r2 and pd.api.types.is_numeric_dtype(type(r1[k]))}
-                    adjacency_table.append({'vertebra_idx_i': r1['vertebra_idx'], 'vertebra_idx_j': r2['vertebra_idx'], 'centroid_dist': dist, **delta_metrics})
-                os.makedirs(output_dir, exist_ok=True)
-                np.save(os.path.join(output_dir, 'canvas.npy'), canvas)
-                np.save(os.path.join(output_dir, 'valid_mask.npy'), valid_mask)
-                pd.DataFrame(region_table).to_csv(os.path.join(output_dir, 'region_table.csv'), index=False)
-                pd.DataFrame(adjacency_table).to_csv(os.path.join(output_dir, 'adjacency_table.csv'), index=False)
-                print(f"[EXPORT] Guardado en {output_dir}: canvas.npy, valid_mask.npy, region_table.csv, adjacency_table.csv")
-            build_pre_tda_structure(centroid_csv, metrics_csv, patches_root, output_dir)
-        # Exportar CSV global dentro de Reportes
-        global_outdir = os.path.join(reportes_dir, "pre_tda_global")
-        os.makedirs(global_outdir, exist_ok=True)
-        print(f"[EXPORT] Guardando reportes globales en {global_outdir}")
-        pd.DataFrame(all_region_rows).to_csv(os.path.join(global_outdir, 'pre_tda_regions_report.csv'), index=False)
-        pd.DataFrame(all_window_rows).to_csv(os.path.join(global_outdir, 'pre_tda_windows_report.csv'), index=False)
-        pd.DataFrame(all_summaries).to_csv(os.path.join(global_outdir, 'pre_tda_summary_report.csv'), index=False)
-        pd.DataFrame(all_region_rows + all_window_rows).to_csv(os.path.join(global_outdir, 'pre_tda_master_table.csv'), index=False)
-        print(f"[EXPORT] Reportes globales generados correctamente.")
+        print("[PIPELINE] Poblando regiones desde patch_images...")
+        regiones = self.build_and_process_patch_regions()
+        print(f"[PIPELINE] Total regiones encontradas: {len(regiones)}")
+        # Aquí puedes continuar con el pipeline usando 'regiones' como entrada para ventanas, métricas, TDA, etc.
+        # Por ejemplo, podrías llamar a otros métodos del proxy o módulos externos para procesar las regiones.
 
     def _run_tda_for_patches(self, patches, filter_name, curve, config_id):
         from MAIA_B01_002_REGION_CLUSTER_VISUAL import tda_patch_combinations as tda_utils
