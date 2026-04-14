@@ -22,41 +22,41 @@ from pathlib import Path
 from MAIA_B01_002_REGION_CLUSTER_VISUAL.tda_patch_combinations import generate_patch_combinations, evaluate_combination, ExperimentBundle, export_experiment_bundle
 
 class TDABaselineAndFilterProxy:
-        def get_expected_patch_folder_names(self):
-            """
-            Devuelve una lista de nombres completos de las carpetas patch_images_{config} según los filtros en filter_names/config.
-            """
-            # Si el config tiene 'filter_names', usar esos filtros
-            filter_names = []
-            if 'filter_names' in self.config:
-                filter_names = normalize_filter_names(self.config['filter_names'])
-            else:
-                filter_names = self.filters
+    def get_expected_patch_folder_names(self):
+        """
+        Devuelve una lista de nombres completos de las carpetas patch_images_{config} según los filtros en filter_names/config.
+        """
+        # Si el config tiene 'filter_names', usar esos filtros
+        filter_names = []
+        if 'filter_names' in self.config:
+            filter_names = normalize_filter_names(self.config['filter_names'])
+        else:
+            filter_names = self.filters
 
-            # Leer el CSV maestro para obtener los parámetros de cada filtro
-            metrics_csv_path = os.path.join(self.tda_root, f"patches_processor_{self.patient_id}", f"master_config_metrics_{self.patient_id}.csv")
-            try:
-                df_metrics = pd.read_csv(metrics_csv_path)
-            except Exception as e:
-                print(f"[ERROR] No se pudo cargar el CSV maestro de métricas: {e}")
-                return []
+        # Leer el CSV maestro para obtener los parámetros de cada filtro
+        metrics_csv_path = os.path.join(self.tda_root, f"patches_processor_{self.patient_id}", f"master_config_metrics_{self.patient_id}.csv")
+        try:
+            df_metrics = pd.read_csv(metrics_csv_path)
+        except Exception as e:
+            print(f"[ERROR] No se pudo cargar el CSV maestro de métricas: {e}")
+            return []
 
-            folder_names = []
-            for filtro in filter_names:
-                filtro_row = df_metrics[df_metrics['filter_name'] == filtro]
-                if filtro_row.empty:
-                    print(f"[WARN] No se encontró configuración en la tabla para filtro: {filtro}")
-                    continue
-                row = filtro_row.iloc[0]
-                use_variance = str(row['use_variance']).capitalize() if 'use_variance' in row else 'False'
-                variance_mode = str(row['variance_mode']).lower() if 'variance_mode' in row else 'none'
-                patch_size = row['patch_size'] if isinstance(row['patch_size'], str) else str(row['patch_size'])
-                stride = str(row['stride']) if 'stride' in row else '1'
-                variance_kernel = str(row['variance_kernel']) if 'variance_kernel' in row else '1'
-                expected_folder = f"Var-{use_variance}_mode-{variance_mode}_pk-{patch_size}_st-{stride}_vk-{variance_kernel}"
-                patch_folder = f"patch_images_{expected_folder}"
-                folder_names.append(patch_folder)
-            return folder_names
+        folder_names = []
+        for filtro in filter_names:
+            filtro_row = df_metrics[df_metrics['filter_name'] == filtro]
+            if filtro_row.empty:
+                print(f"[WARN] No se encontró configuración en la tabla para filtro: {filtro}")
+                continue
+            row = filtro_row.iloc[0]
+            use_variance = str(row['use_variance']).capitalize() if 'use_variance' in row else 'False'
+            variance_mode = str(row['variance_mode']).lower() if 'variance_mode' in row else 'none'
+            patch_size = row['patch_size'] if isinstance(row['patch_size'], str) else str(row['patch_size'])
+            stride = str(row['stride']) if 'stride' in row else '1'
+            variance_kernel = str(row['variance_kernel']) if 'variance_kernel' in row else '1'
+            expected_folder = f"Var-{use_variance}_mode-{variance_mode}_pk-{patch_size}_st-{stride}_vk-{variance_kernel}"
+            patch_folder = f"patch_images_{expected_folder}"
+            folder_names.append(patch_folder)
+        return folder_names
     def _patch_to_region(self, patch, filter_name, config_id):
         from MAIA_B01_002_REGION_CLUSTER_VISUAL.tda_patch_combinations import RegionRecord
         # patch puede ser PatchPathDTO o PatchDTO
