@@ -116,31 +116,39 @@ class TDABaselineAndFilterProxy:
         all_region_rows = []
         all_window_rows = []
         all_summaries = []
+        reportes_dir = os.path.join(self.patient_dir, "Reportes")
+        os.makedirs(reportes_dir, exist_ok=True)
+        print(f"[REPORTES] Carpeta de reportes: {reportes_dir}")
         for filtro in self.filters:
             patch_dir = os.path.join(self.patient_dir, f"patch_images_{filtro}")
             config_id = filtro
             if not os.path.exists(patch_dir):
+                print(f"[SKIP] No existe carpeta de parches para filtro: {filtro} -> {patch_dir}")
                 continue
             patches = self._load_patches(patch_dir)
-            print(f"Procesando filtro {filtro}: {len(patches)} parches")
+            print(f"[INICIO] Procesando filtro {filtro}: {len(patches)} parches")
             region_rows, window_rows, summary = self._run_tda_for_patches(patches, filtro, curve, config_id)
-            # Guardar resultados en subcarpeta por filtro
-            outdir = os.path.join(self.patient_dir, f"pre_tda_{filtro}")
+            # Guardar resultados en subcarpeta por filtro dentro de Reportes
+            outdir = os.path.join(reportes_dir, f"pre_tda_{filtro}")
             os.makedirs(outdir, exist_ok=True)
+            print(f"[EXPORT] Guardando reportes de filtro '{filtro}' en {outdir}")
             pd.DataFrame(region_rows).to_csv(os.path.join(outdir, 'pre_tda_regions_report.csv'), index=False)
             pd.DataFrame(window_rows).to_csv(os.path.join(outdir, 'pre_tda_windows_report.csv'), index=False)
             pd.DataFrame(summary).to_csv(os.path.join(outdir, 'pre_tda_summary_report.csv'), index=False)
+            print(f"[EXPORT] Reportes de filtro '{filtro}' generados correctamente.")
             # Acumular para el global
             all_region_rows.extend(region_rows)
             all_window_rows.extend(window_rows)
             all_summaries.extend(summary)
-        # Exportar CSV global
-        global_outdir = os.path.join(self.patient_dir, "pre_tda_global")
+        # Exportar CSV global dentro de Reportes
+        global_outdir = os.path.join(reportes_dir, "pre_tda_global")
         os.makedirs(global_outdir, exist_ok=True)
+        print(f"[EXPORT] Guardando reportes globales en {global_outdir}")
         pd.DataFrame(all_region_rows).to_csv(os.path.join(global_outdir, 'pre_tda_regions_report.csv'), index=False)
         pd.DataFrame(all_window_rows).to_csv(os.path.join(global_outdir, 'pre_tda_windows_report.csv'), index=False)
         pd.DataFrame(all_summaries).to_csv(os.path.join(global_outdir, 'pre_tda_summary_report.csv'), index=False)
         pd.DataFrame(all_region_rows + all_window_rows).to_csv(os.path.join(global_outdir, 'pre_tda_master_table.csv'), index=False)
+        print(f"[EXPORT] Reportes globales generados correctamente.")
 
     def _run_tda_for_patches(self, patches, filter_name, curve, config_id):
         from MAIA_B01_002_REGION_CLUSTER_VISUAL import tda_patch_combinations as tda_utils
