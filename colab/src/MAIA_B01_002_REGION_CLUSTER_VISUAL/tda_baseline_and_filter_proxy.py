@@ -1,3 +1,4 @@
+from MAIA_B01_002_REGION_CLUSTER_VISUAL.patch_images_paths_utils import build_patch_images_paths_from_csv
 def normalize_filter_names(filter_names):
     """
     Normaliza filter_names a una lista de strings únicos.
@@ -22,6 +23,51 @@ from pathlib import Path
 from MAIA_B01_002_REGION_CLUSTER_VISUAL.tda_patch_combinations import generate_patch_combinations, evaluate_combination, ExperimentBundle, export_experiment_bundle
 
 class TDABaselineAndFilterProxy:
+
+        def build_and_process_patch_regions(self, patch_images_plot_config=None):
+            """
+            Construye rutas patch_images usando el CSV y procesa regiones para cada carpeta encontrada.
+            patch_images_plot_config: dict opcional con claves como unique_only, show_plot, images_per_folder, max_folders_to_plot
+            """
+            config = dict(self.config)
+            config['csv_path'] = os.path.join(self.tda_root, f"patches_processor_{self.patient_id}", f"master_config_metrics_{self.patient_id}.csv")
+            if patch_images_plot_config:
+                config['patch_images_plot_config'] = patch_images_plot_config
+            patch_folders = build_patch_images_paths_from_csv(config)
+            from MAIA_B01_002_REGION_CLUSTER_VISUAL.tda_patch_combinations import RegionRecord
+            all_regions = []
+            for folder in patch_folders:
+                if not os.path.exists(folder):
+                    print(f"[WARN] Carpeta no encontrada: {folder}")
+                    continue
+                image_files = [str(f) for f in Path(folder).glob('*.png')]
+                for img_path in image_files:
+                    # Poblar RegionRecord con los datos mínimos
+                    region = RegionRecord(
+                        region_id=Path(img_path).stem,
+                        patient_id=self.patient_id,
+                        config_id=None,
+                        filter_name=Path(folder).name,
+                        image_path=img_path,
+                        vertebra_idx=None,
+                        centroid_x=None,
+                        centroid_y=None,
+                        use_variance=None,
+                        variance_mode=None,
+                        patch_size=None,
+                        stride=None,
+                        variance_kernel=None,
+                        bbox=None,
+                        centroid=(None, None),
+                        curve_param=None,
+                        order_index=None,
+                        lives_near_curve=None,
+                        split=None,
+                        metadata={"optional_metadata": {}}
+                    )
+                    all_regions.append(region)
+            print(f"[INFO] Total regiones encontradas: {len(all_regions)}")
+            return all_regions
     def log_master_config_metrics(self):
         """
         Imprime si existe y el contenido del archivo master_config_metrics_{patient_id}.csv con logs claros.
