@@ -153,26 +153,39 @@ class TDABaselineAndFilterProxy:
         self.patient_id = config["patient_id"]
         self.restrictions = config["restrictions"]
         self.experiment_modes = config["experiment_modes"]
-        # Siempre usar todas las métricas por defecto
-        self.metrics = [
-            "mean_dice",
-            "mean_iou",
-            "mean_mse_img",
-            "mean_mae_img",
-            "mean_grad_mse",
-            "mean_grad_mae",
-            "mean_var_diff",
-            "mean_intensity_diff"
-        ]
-        self.patient_dir = os.path.join(self.tda_root, f"patches_processor_{self.patient_id}", self.patient_id, "bands")
-        self.curve_csv = os.path.join(self.tda_root, f"patches_processor_{self.patient_id}", f"centroid_curve_{self.patient_id}.csv")
-        # Si el config tiene 'filter_names', solo usa esos filtros
-        if "filter_names" in config:
-            clean_filters = normalize_filter_names(config["filter_names"])
-            self.filters = [f for f in self._find_filters() if f in clean_filters]
-        else:
-            self.filters = self._find_filters()
-        # Path(self.patient_dir).mkdir(parents=True, exist_ok=True)
+        # --- Construcción automática de patch_folders desde el CSV maestro ---
+        import pandas as pd
+        import os
+
+        config = {
+            'tda_root': '/content/drive/MyDrive/TDA_PIPELINE',
+            'patient_id': 'S_37',
+            'restrictions': {'min_k': 2, 'max_k': 8, 'max_combination_count': 100},
+            'experiment_modes': ['all_patches', 'curve_selected_patches', 'curve_all_patches_nerve']
+        }
+
+        csv_path = os.path.join(config['tda_root'], f"master_config_metrics_{config['patient_id']}.csv")
+        df = pd.read_csv(csv_path)
+
+        def build_folder_name_from_row(row):
+            return (
+                f"{row['filter_name']}"
+                f"_var-{row['use_variance']}"
+                f"_mode-{row['variance_mode']}"
+                f"_pk-{row['patch_size']}"
+                f"_st-{row['stride']}"
+                f"_vk-{row['variance_kernel']}"
+            )
+        
+        df['config_folder'] = df.apply(build_folder_name_from_row, axis=1)
+        df['patch_images_path'] = df['config_folder'].apply(
+            lambda folder: os.path.join(config['tda_root'], config['patient_id'], folder, 'patch_images')
+        )
+        patch_folders = df['patch_images_path'].tolist()
+
+        # --- Ejemplo de uso ---
+        proxy = TDABaselineAndFilterProxy(config, patch_folders=patch_folders)
+        proxy.run()
 
     def _find_filters(self):
         # Busca subcarpetas de filtros en la ruta real de imágenes
