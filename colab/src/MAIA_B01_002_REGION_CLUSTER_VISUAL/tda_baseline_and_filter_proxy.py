@@ -22,6 +22,22 @@ from pathlib import Path
 from MAIA_B01_002_REGION_CLUSTER_VISUAL.tda_patch_combinations import generate_patch_combinations, evaluate_combination, ExperimentBundle, export_experiment_bundle
 
 class TDABaselineAndFilterProxy:
+    def log_master_config_metrics(self):
+        """
+        Imprime si existe y el contenido del archivo master_config_metrics_{patient_id}.csv con logs claros.
+        """
+        csv_path = os.path.join(self.tda_root, f"patches_processor_{self.patient_id}", f"master_config_metrics_{self.patient_id}.csv")
+        print(f"[LOG] Buscando archivo de métricas: {csv_path}")
+        if os.path.exists(csv_path):
+            print(f"[LOG] El archivo existe. Mostrando contenido:")
+            try:
+                with open(csv_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                print(content)
+            except Exception as e:
+                print(f"[ERROR] No se pudo leer el archivo: {e}")
+        else:
+            print(f"[ERROR] El archivo no existe: {csv_path}")
     def get_expected_patch_folder_names(self):
         """
         Devuelve una lista de nombres completos de las carpetas patch_images_{config} según los filtros en filter_names/config.
@@ -35,6 +51,7 @@ class TDABaselineAndFilterProxy:
 
         # Leer el CSV maestro para obtener los parámetros de cada filtro
         metrics_csv_path = os.path.join(self.tda_root, f"patches_processor_{self.patient_id}", f"master_config_metrics_{self.patient_id}.csv")
+
         try:
             df_metrics = pd.read_csv(metrics_csv_path)
         except Exception as e:
