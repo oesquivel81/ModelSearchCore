@@ -54,7 +54,17 @@ class TDABaselineAndFilterProxy:
         self.patient_id = config["patient_id"]
         self.restrictions = config["restrictions"]
         self.experiment_modes = config["experiment_modes"]
-        self.metrics = config["metrics"]
+        # Siempre usar todas las métricas por defecto
+        self.metrics = [
+            "mean_dice",
+            "mean_iou",
+            "mean_mse_img",
+            "mean_mae_img",
+            "mean_grad_mse",
+            "mean_grad_mae",
+            "mean_var_diff",
+            "mean_intensity_diff"
+        ]
         self.patient_dir = os.path.join(self.tda_root, f"patches_processor_{self.patient_id}", self.patient_id, "bands")
         self.curve_csv = os.path.join(self.tda_root, f"patches_processor_{self.patient_id}", f"centroid_curve_{self.patient_id}.csv")
         # Si el config tiene 'filter_names', solo usa esos filtros
@@ -102,36 +112,35 @@ class TDABaselineAndFilterProxy:
         # 1. Leer curva de centroides
         df_centroids = pd.read_csv(self.curve_csv)
         curve = df_centroids[["centroid_x", "centroid_y"]].values.tolist()
-        # 2. Procesar baseline y cada filtro de manera independiente
+        # 2. Procesar cada filtro de manera independiente
         all_region_rows = []
         all_window_rows = []
         all_summaries = []
-        for filtro in ["baseline"] + self.filters:
-            if filtro == "baseline":
-                patch_dir = os.path.join(self.patient_dir, "patch_images")
-                config_id = "baseline"
-            else:
-                patch_dir = os.path.join(self.patient_dir, f"patch_images_{filtro}")
-                config_id = filtro
+        for filtro in self.filters:
+            patch_dir = os.path.join(self.patient_dir, f"patch_images_{filtro}")
+            config_id = filtro
             if not os.path.exists(patch_dir):
                 continue
             patches = self._load_patches(patch_dir)
             print(f"Procesando filtro {filtro}: {len(patches)} parches")
             region_rows, window_rows, summary = self._run_tda_for_patches(patches, filtro, curve, config_id)
+            # Guardar resultados en subcarpeta por filtro
+            outdir = os.path.join(self.patient_dir, f"pre_tda_{filtro}")
+            os.makedirs(outdir, exist_ok=True)
+            pd.DataFrame(region_rows).to_csv(os.path.join(outdir, 'pre_tda_regions_report.csv'), index=False)
+            pd.DataFrame(window_rows).to_csv(os.path.join(outdir, 'pre_tda_windows_report.csv'), index=False)
+            pd.DataFrame(summary).to_csv(os.path.join(outdir, 'pre_tda_summary_report.csv'), index=False)
+            # Acumular para el global
             all_region_rows.extend(region_rows)
             all_window_rows.extend(window_rows)
             all_summaries.extend(summary)
-        # Exportar consolidado global
-        outdir = os.path.join(self.patient_dir, "pre_tda_consolidado")
-        os.makedirs(outdir, exist_ok=True)
-        for row in all_region_rows:
-            row['record_level'] = 'region'
-        for row in all_window_rows:
-            row['record_level'] = 'window'
-        pd.DataFrame(all_region_rows).to_csv(os.path.join(outdir, 'pre_tda_regions_report.csv'), index=False)
-        pd.DataFrame(all_window_rows).to_csv(os.path.join(outdir, 'pre_tda_windows_report.csv'), index=False)
-        pd.DataFrame(all_summaries).to_csv(os.path.join(outdir, 'pre_tda_summary_report.csv'), index=False)
-        pd.DataFrame(all_region_rows + all_window_rows).to_csv(os.path.join(outdir, 'master_pre_tda_table.csv'), index=False)
+        # Exportar CSV global
+        global_outdir = os.path.join(self.patient_dir, "pre_tda_global")
+        os.makedirs(global_outdir, exist_ok=True)
+        pd.DataFrame(all_region_rows).to_csv(os.path.join(global_outdir, 'pre_tda_regions_report.csv'), index=False)
+        pd.DataFrame(all_window_rows).to_csv(os.path.join(global_outdir, 'pre_tda_windows_report.csv'), index=False)
+        pd.DataFrame(all_summaries).to_csv(os.path.join(global_outdir, 'pre_tda_summary_report.csv'), index=False)
+        pd.DataFrame(all_region_rows + all_window_rows).to_csv(os.path.join(global_outdir, 'pre_tda_master_table.csv'), index=False)
 
     def _run_tda_for_patches(self, patches, filter_name, curve, config_id):
         from MAIA_B01_002_REGION_CLUSTER_VISUAL import tda_patch_combinations as tda_utils

@@ -186,6 +186,18 @@ def load_regions_from_centroid_csv(csv_path: str, patient_id: str, config_id: st
         idx = row.get("vertebra_idx", None)
         image_path = image_map.get(idx, "")
         metrics = metrics_map.get(idx, {})
+        # Extrae todas las columnas adicionales del row y metrics
+        extra_metrics = {}
+        # Todas las columnas del row excepto las estándar
+        exclude_cols = {"vertebra_idx", "centroid_x", "centroid_y", "split"}
+        for col in row.index:
+            if col not in exclude_cols:
+                extra_metrics[col] = row[col]
+        # Todas las columnas del metrics (si existen)
+        if metrics is not None:
+            for col in metrics.index if hasattr(metrics, 'index') else []:
+                if col not in extra_metrics:
+                    extra_metrics[col] = metrics[col]
         regions.append(RegionRecord(
             region_id = str(idx),
             patient_id = patient_id,
@@ -214,7 +226,7 @@ def load_regions_from_centroid_csv(csv_path: str, patient_id: str, config_id: st
             order_index = idx,
             lives_near_curve = None,
             split = row.get("split", None),
-            metadata = {"optional_metadata": {}}
+            metadata = {"optional_metadata": {}, "extra_metrics": extra_metrics}
         ))
     return regions
 from dataclasses import dataclass, asdict, field
