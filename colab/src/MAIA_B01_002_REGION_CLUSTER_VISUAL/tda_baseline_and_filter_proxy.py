@@ -217,24 +217,26 @@ class TDABaselineAndFilterProxy:
 
     def run(self):
         """
-        Ejecuta el pipeline completo: pobla regiones desde patch_images, agrupa por filtro y ejecuta análisis de métricas y exporte reportes.
+        Ejecuta el pipeline completo: para cada filtro, carga regiones enriquecidas desde el archivo de centroides y ejecuta análisis de métricas/exporte reportes.
         """
         print("[PIPELINE] Poblando regiones desde patch_images...")
         regiones = self.build_and_process_patch_regions()
         print(f"[PIPELINE] Total regiones encontradas: {len(regiones)}")
 
-        # Agrupar regiones por filtro
-        from collections import defaultdict
-        regiones_por_filtro = defaultdict(list)
-        for r in regiones:
-            regiones_por_filtro[r.filter_name].append(r)
-
-        # Ejecutar análisis de métricas para cada filtro
-        for filtro, regiones_filtro in regiones_por_filtro.items():
-            print(f"[PIPELINE] Analizando regiones para filtro: {filtro} (total: {len(regiones_filtro)})")
-            # El método _run_tda_for_patches espera: patches, filter_name, curve, config_id
-            # Usamos None para curve y config_id si no están disponibles
-            self._run_tda_for_patches(regiones_filtro, filtro, curve=None, config_id=None)
+        # Procesar por filtro usando regiones enriquecidas desde centroides
+        for filtro in self.filters:
+            print(f"[PIPELINE] Analizando regiones para filtro: {filtro}")
+            from MAIA_B01_002_REGION_CLUSTER_VISUAL import tda_patch_combinations as tda_utils
+            centroid_path = tda_utils.find_centroid_curve_file(self.tda_root, self.patient_id)
+            print(f"[DEBUG] Buscando centroides en: {centroid_path}")
+            region_records = tda_utils.load_regions_from_centroid_csv(centroid_path, self.patient_id, config_id=None, filter_name=filtro)
+            print(f"[DEBUG] Regiones enriquecidas encontradas: {len(region_records)} para filtro: {filtro}")
+            if not region_records:
+                print(f"[WARN] No se encontraron regiones enriquecidas para filtro: {filtro}")
+                continue
+            print(f"[DEBUG] Ejecutando análisis de métricas para filtro: {filtro} con {len(region_records)} regiones...")
+            self._run_tda_for_patches(region_records, filtro, curve=None, config_id=None)
+            print(f"[DEBUG] Análisis y exportación de métricas completados para filtro: {filtro}")
 
     def _run_tda_for_patches(self, patches, filter_name, curve, config_id):
         from MAIA_B01_002_REGION_CLUSTER_VISUAL import tda_patch_combinations as tda_utils
