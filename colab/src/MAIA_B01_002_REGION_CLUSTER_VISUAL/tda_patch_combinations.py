@@ -171,6 +171,17 @@ def load_regions_from_centroid_csv(csv_path: str, patient_id: str, config_id: st
             if idx is not None:
                 metrics_map[idx] = mrow
 
+    def safe_nan(val):
+        import numpy as np
+        if val is None:
+            return np.nan
+        try:
+            if isinstance(val, str) and not val.strip():
+                return np.nan
+            return float(val)
+        except Exception:
+            return np.nan
+
     for _, row in df.iterrows():
         idx = row.get("vertebra_idx", None)
         image_path = image_map.get(idx, "")
@@ -184,14 +195,14 @@ def load_regions_from_centroid_csv(csv_path: str, patient_id: str, config_id: st
             vertebra_idx = idx,
             centroid_x = row.get("centroid_x", None),
             centroid_y = row.get("centroid_y", None),
-            mean_dice = metrics.get("mean_dice", None) if metrics is not None else None,
-            mean_iou = metrics.get("mean_iou", None) if metrics is not None else None,
-            mean_mse_img = metrics.get("mean_mse_img", None) if metrics is not None else None,
-            mean_mae_img = metrics.get("mean_mae_img", None) if metrics is not None else None,
-            mean_grad_mse = metrics.get("mean_grad_mse", None) if metrics is not None else None,
-            mean_grad_mae = metrics.get("mean_grad_mae", None) if metrics is not None else None,
-            mean_var_diff = metrics.get("mean_var_diff", None) if metrics is not None else None,
-            mean_intensity_diff = metrics.get("mean_intensity_diff", None) if metrics is not None else None,
+            mean_dice = safe_nan(metrics.get("mean_dice", None)) if metrics is not None else np.nan,
+            mean_iou = safe_nan(metrics.get("mean_iou", None)) if metrics is not None else np.nan,
+            mean_mse_img = safe_nan(metrics.get("mean_mse_img", None)) if metrics is not None else np.nan,
+            mean_mae_img = safe_nan(metrics.get("mean_mae_img", None)) if metrics is not None else np.nan,
+            mean_grad_mse = safe_nan(metrics.get("mean_grad_mse", None)) if metrics is not None else np.nan,
+            mean_grad_mae = safe_nan(metrics.get("mean_grad_mae", None)) if metrics is not None else np.nan,
+            mean_var_diff = safe_nan(metrics.get("mean_var_diff", None)) if metrics is not None else np.nan,
+            mean_intensity_diff = safe_nan(metrics.get("mean_intensity_diff", None)) if metrics is not None else np.nan,
             use_variance = None,
             variance_mode = None,
             patch_size = None,
