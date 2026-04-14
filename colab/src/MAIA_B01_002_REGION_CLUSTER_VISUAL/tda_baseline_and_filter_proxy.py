@@ -171,7 +171,7 @@ class TDABaselineAndFilterProxy:
             self.filters = [f for f in self._find_filters() if f in clean_filters]
         else:
             self.filters = self._find_filters()
-        Path(self.patient_dir).mkdir(parents=True, exist_ok=True)
+        # Path(self.patient_dir).mkdir(parents=True, exist_ok=True)
 
     def _find_filters(self):
         # Busca subcarpetas de filtros en la ruta real de imágenes
@@ -217,13 +217,24 @@ class TDABaselineAndFilterProxy:
 
     def run(self):
         """
-        Ejecuta el pipeline completo usando build_and_process_patch_regions para poblar regiones desde patch_images según el CSV y la configuración.
+        Ejecuta el pipeline completo: pobla regiones desde patch_images, agrupa por filtro y ejecuta análisis de métricas y exporte reportes.
         """
         print("[PIPELINE] Poblando regiones desde patch_images...")
         regiones = self.build_and_process_patch_regions()
         print(f"[PIPELINE] Total regiones encontradas: {len(regiones)}")
-        # Aquí puedes continuar con el pipeline usando 'regiones' como entrada para ventanas, métricas, TDA, etc.
-        # Por ejemplo, podrías llamar a otros métodos del proxy o módulos externos para procesar las regiones.
+
+        # Agrupar regiones por filtro
+        from collections import defaultdict
+        regiones_por_filtro = defaultdict(list)
+        for r in regiones:
+            regiones_por_filtro[r.filter_name].append(r)
+
+        # Ejecutar análisis de métricas para cada filtro
+        for filtro, regiones_filtro in regiones_por_filtro.items():
+            print(f"[PIPELINE] Analizando regiones para filtro: {filtro} (total: {len(regiones_filtro)})")
+            # El método _run_tda_for_patches espera: patches, filter_name, curve, config_id
+            # Usamos None para curve y config_id si no están disponibles
+            self._run_tda_for_patches(regiones_filtro, filtro, curve=None, config_id=None)
 
     def _run_tda_for_patches(self, patches, filter_name, curve, config_id):
         from MAIA_B01_002_REGION_CLUSTER_VISUAL import tda_patch_combinations as tda_utils
