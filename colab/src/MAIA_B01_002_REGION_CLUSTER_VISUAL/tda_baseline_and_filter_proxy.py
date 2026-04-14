@@ -119,6 +119,7 @@ class TDABaselineAndFilterProxy:
         reportes_dir = os.path.join(self.patient_dir, "Reportes")
         os.makedirs(reportes_dir, exist_ok=True)
         print(f"[REPORTES] Carpeta de reportes: {reportes_dir}")
+        print(f"[DEBUG] Filtros detectados: {self.filters}")
         from PIL import Image
         import numpy as np
         def build_pre_tda_structure(centroid_csv, metrics_csv, patches_root, output_dir):
