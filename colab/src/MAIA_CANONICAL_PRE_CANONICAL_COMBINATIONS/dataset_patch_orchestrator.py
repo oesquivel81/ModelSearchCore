@@ -29,14 +29,32 @@ class DatasetPatchOrchestrator:
 
         failed_cases = []
         dir_root = self.config.get('dir_root', None)
+        mask_columns = [
+            'mask_path',
+            'label_binary_path',
+            'multiclass_id_png',
+            'multiclass_gray_jpg',
+            'multiclass_color_jpg',
+            'metrics_json'
+        ]
         for idx, row in df.iterrows():
             patient_id = str(row['patient_id'])
             img_path = row.get('radiograph_path', None)
-            mask_path = row.get('mask_path', None)
-            # Si dir_root está definido y la ruta no es absoluta, concatena
+            # Busca la primera máscara válida
+            mask_path = None
+            for col in mask_columns:
+                if col in row and pd.notnull(row[col]) and str(row[col]).strip() != '':
+                    mask_path = row[col]
+                    break
+            # Si dir_root está definido y la ruta no es absoluta, concatena para todas las columnas relevantes
             if dir_root:
                 if img_path and not os.path.isabs(img_path):
                     img_path = os.path.join(dir_root, img_path)
+                for col in mask_columns:
+                    if col in row and pd.notnull(row[col]) and str(row[col]).strip() != '':
+                        val = row[col]
+                        if not os.path.isabs(val):
+                            row[col] = os.path.join(dir_root, val)
                 if mask_path and not os.path.isabs(mask_path):
                     mask_path = os.path.join(dir_root, mask_path)
             print(f"[INFO] Paciente {patient_id} - radiograph_path: {img_path}")
