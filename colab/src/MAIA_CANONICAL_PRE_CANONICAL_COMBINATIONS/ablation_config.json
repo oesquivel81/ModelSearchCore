@@ -1,1 +1,9 @@
-<copied>
+{
+    "config_id": "test1",
+    "filter_name": "sobel",
+    "use_variance": true,
+    "variance_mode": "concat_channel",
+    "patch_size": [16, 16],
+    "stride": 8,
+    "variance_kernel": 5
+}
