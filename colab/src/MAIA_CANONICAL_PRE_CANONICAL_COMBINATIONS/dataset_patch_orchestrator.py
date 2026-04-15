@@ -59,12 +59,15 @@ class DatasetPatchOrchestrator:
             if dir_root and img_path and not os.path.isabs(img_path):
                 img_path = os.path.join(dir_root, img_path)
 
+
             for mask_col in mask_columns:
                 mask_path = row.get(mask_col, None)
-                if mask_path is None or str(mask_path).strip() == '' or (dir_root and not os.path.isabs(mask_path)):
-                    if dir_root and mask_path and not os.path.isabs(mask_path):
-                        mask_path = os.path.join(dir_root, mask_path)
-                if not mask_path or not os.path.exists(mask_path):
+                # Solo procesar si es string y no vacía
+                if not isinstance(mask_path, str) or mask_path.strip() == '':
+                    continue
+                if dir_root and not os.path.isabs(mask_path):
+                    mask_path = os.path.join(dir_root, mask_path)
+                if not os.path.exists(mask_path):
                     continue
 
                 print(f"[INFO] Paciente {patient_id} - radiograph_path: {img_path}")
