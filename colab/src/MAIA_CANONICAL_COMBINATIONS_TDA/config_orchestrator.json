@@ -1,0 +1,12 @@
+{
+    "dataset_csv": "C:/Users/Tavo/ModelSearchCore/worker/MaIA_Scoliosis_Dataset/dataset_index.csv",
+    "save_root": "C:/Users/Tavo/ModelSearchCore/colab/src/MAIA_CANONICAL_COMBINATIONS_TDA/patches_output",
+    "centroid_curve_dir": "C:/Users/Tavo/ModelSearchCore/colab/src/MAIA_CANONICAL_COMBINATIONS_TDA/centroid_curves",
+    "filters": [
+        "bilateral+sobel",
+        "clahe+median+unsharp_mask+scharr",
+        "sobel"
+    ],
+    "patch_size": [128, 128],
+    "stride": 32
+}
