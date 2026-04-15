@@ -26,15 +26,19 @@ class DatasetPatchOrchestrator:
 
     def run(self):
         df = pd.read_csv(self.dataset_csv)
+
+        failed_cases = []
         for idx, row in df.iterrows():
             patient_id = str(row['patient_id'])
-            img_path = row['image_path']
-            mask_path = row['mask_path']
-            img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
-            mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
+            img_path = row.get('radiograph_path', None)
+            mask_path = row.get('mask_path', None)
+            img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE) if img_path else None
+            mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE) if mask_path else None
             if img is None or mask is None:
                 print(f"[WARN] No se pudo cargar imagen o máscara para {patient_id}")
+                failed_cases.append({'patient_id': patient_id, 'reason': 'no_image_or_mask'})
                 continue
+
             # 1. Generar parches y curva de centroides sobre la imagen original
             try:
                 from colab.src.image_utils.vertebra_component_extractor import VertebraComponentExtractor
@@ -48,11 +52,26 @@ class DatasetPatchOrchestrator:
                     pad_y=15,
                     save_dir=patch_dir
                 )
+                # Validar que la máscara permita combinaciones válidas
+                if not extractor.has_valid_combinations():
+                    print(f"[WARN] Máscara no permite combinaciones válidas para {patient_id}")
+                    failed_cases.append({'patient_id': patient_id, 'reason': 'invalid_mask_combinations'})
+                    continue
                 extractor.run()
                 df_meta = extractor.save_patches_with_metadata(sample_id=patient_id)
+                # Seleccionar los mejores parches según la máscara
+                if hasattr(extractor, 'select_best_patches'):
+                    df_meta = extractor.select_best_patches(df_meta)
+                # Validar overlay corresponde al borde
+                if hasattr(extractor, 'validate_overlay_borders'):
+                    if not extractor.validate_overlay_borders(df_meta):
+                        print(f"[WARN] Overlay no corresponde al borde para {patient_id}")
+                        failed_cases.append({'patient_id': patient_id, 'reason': 'overlay_mismatch'})
+                        continue
                 print(f"Parches y centroides originales generados para {patient_id}")
             except Exception as e:
                 print(f"[ERROR] Falló la generación de parches/centroides originales para {patient_id}: {e}")
+                failed_cases.append({'patient_id': patient_id, 'reason': str(e)})
                 continue
 
             # 2. Aplicar filtros a cada parche generado
@@ -71,6 +90,13 @@ class DatasetPatchOrchestrator:
                         out_patch_path = os.path.join(filt_dir, os.path.basename(patch_img_path))
                         cv2.imwrite(out_patch_path, filtered_patch)
                     print(f"Parches filtrados guardados para {patient_id} con filtro {filt}")
+
+        # Guardar CSV con los casos fallidos
+        if failed_cases:
+            failed_df = pd.DataFrame(failed_cases)
+            failed_csv_path = os.path.join(self.save_root, "failed_centroid_cases.csv")
+            failed_df.to_csv(failed_csv_path, index=False)
+            print(f"Casos fallidos guardados en {failed_csv_path}")
 
 # Ejemplo de uso:
 # orchestrator = DatasetPatchOrchestrator('config_orchestrator.json')
