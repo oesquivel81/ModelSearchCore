@@ -240,12 +240,21 @@ class VertebraComponentExtractor:
         if self.save_dir is None:
             raise ValueError("Define save_dir para guardar patches.")
 
-        os.makedirs(self.save_dir, exist_ok=True)
+        # Refuerzo: crear todos los directorios necesarios de forma robusta
+        try:
+            os.makedirs(self.save_dir, exist_ok=True)
+        except Exception as e:
+            print(f"[ERROR] No se pudo crear el directorio principal {self.save_dir}: {e}")
+            raise
 
         img_dir = os.path.join(self.save_dir, "patch_images")
         mask_dir = os.path.join(self.save_dir, "patch_masks")
-        os.makedirs(img_dir, exist_ok=True)
-        os.makedirs(mask_dir, exist_ok=True)
+        for d in [img_dir, mask_dir]:
+            try:
+                os.makedirs(d, exist_ok=True)
+            except Exception as e:
+                print(f"[ERROR] No se pudo crear el directorio {d}: {e}")
+                raise
 
         rows = []
         curva_rows = []
