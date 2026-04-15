@@ -35,16 +35,3 @@ def apply_filter_chain(image, filter_chain):
         else:
             raise ValueError(f"Filtro no soportado: {f}")
     return img
-
-# Ejemplo de uso:
-if __name__ == "__main__":
-    img = cv2.imread("ruta/a/tu/imagen.png", cv2.IMREAD_GRAYSCALE)
-    filtros = [
-        "bilateral+sobel",
-        "clahe+median+unsharp_mask+scharr",
-        "sobel"
-    ]
-    for f in filtros:
-        out = apply_filter_chain(img, f)
-        cv2.imwrite(f"output_{f.replace('+','_')}.png", out)
-        print(f"Filtro '{f}' aplicado y guardado como output_{f.replace('+','_')}.png")

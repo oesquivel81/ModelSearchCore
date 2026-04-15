@@ -1,93 +1,142 @@
 import os
 import json
-import pandas as pd
 import cv2
+import pandas as pd
 from .apply_filter_chain import apply_filter_chain
 
 
 class DatasetPatchOrchestrator:
     def __init__(self, config, truncate=None, mask_columns_override=None):
-        # Permite pasar un dict o un path a JSON
         if isinstance(config, dict):
             self.config = config
         elif isinstance(config, str):
-            with open(config, 'r') as f:
+            with open(config, "r") as f:
                 self.config = json.load(f)
         else:
-            raise TypeError("config debe ser un dict o un path a archivo JSON")
-        self.dataset_csv = self.config['dataset_csv']
-        self.save_root = self.config['save_root']
-        self.filters = self.config['filters']
-        self.patch_size = tuple(self.config.get('patch_size', (128, 128)))
-        self.stride = self.config.get('stride', 32)
-        self.centroid_curve_dir = self.config.get('centroid_curve_dir', self.save_root)
+            raise TypeError("config debe ser dict o path a JSON")
+
+        self.dataset_csv = self.config["dataset_csv"]
+        self.save_root = self.config["save_root"]
+        self.filters = self.config.get("filters", ["none"])
+        self.patch_size = tuple(self.config.get("patch_size", (128, 128)))
+        self.stride = self.config.get("stride", 32)
+        self.centroid_curve_dir = self.config.get("centroid_curve_dir", self.save_root)
+        self.dir_root = self.config.get("dir_root", None)
+
+        self.truncate = truncate
+        self.mask_columns_override = mask_columns_override
+
         os.makedirs(self.save_root, exist_ok=True)
         os.makedirs(self.centroid_curve_dir, exist_ok=True)
 
-        # Propiedades nuevas
-        # truncate: None (todo), o (start, stop) como (0, 10)
-        self.truncate = truncate
-        # mask_columns_override: None (todas), o lista de columnas a procesar
-        self.mask_columns_override = mask_columns_override
+    def _resolve_path(self, path_value):
+        if not isinstance(path_value, str) or not path_value.strip():
+            return None
+        if self.dir_root and not os.path.isabs(path_value):
+            return os.path.join(self.dir_root, path_value)
+        return path_value
+
+    def _get_mask_columns(self):
+        if self.mask_columns_override is not None:
+            return self.mask_columns_override
+        return [
+            "mask_path",
+            "label_binary_path",
+            "multiclass_id_png",
+            "multiclass_gray_jpg",
+            "multiclass_color_jpg"
+        ]
+
+    def _apply_filters_to_patches(self, df_meta, patient_id, mask_col):
+        if df_meta is None or df_meta.empty:
+            return []
+
+        filtered_rows = []
+
+        for filt in self.filters:
+            filt_safe = filt.replace("+", "_")
+            filt_dir = os.path.join(self.save_root, f"{patient_id}_{mask_col}", "filtered", filt_safe)
+            os.makedirs(filt_dir, exist_ok=True)
+
+            for _, row_patch in df_meta.iterrows():
+                patch_img_path = row_patch.get("image_patch_path", None)
+                if not isinstance(patch_img_path, str) or not os.path.exists(patch_img_path):
+                    continue
+
+                patch_img = cv2.imread(patch_img_path, cv2.IMREAD_GRAYSCALE)
+                if patch_img is None:
+                    continue
+
+                filtered_patch = apply_filter_chain(patch_img, filt)
+
+                out_name = os.path.basename(patch_img_path)
+                out_patch_path = os.path.join(filt_dir, out_name)
+                cv2.imwrite(out_patch_path, filtered_patch)
+
+                row_copy = row_patch.to_dict()
+                row_copy["patient_id"] = patient_id
+                row_copy["mask_col"] = mask_col
+                row_copy["filter_name"] = filt
+                row_copy["filtered_patch_path"] = out_patch_path
+                filtered_rows.append(row_copy)
+
+        return filtered_rows
 
     def run(self):
+        from colab.src.image_utils.vertebra_component_extractor import VertebraComponentExtractor
+
         df = pd.read_csv(self.dataset_csv)
 
-        # Truncar el dataframe si se solicita
         if self.truncate is not None:
             start, stop = self.truncate
             df = df.iloc[start:stop]
 
         failed_cases = []
-        dir_root = self.config.get('dir_root', None)
-        # Permitir override de columnas de máscara
-        if self.mask_columns_override is not None:
-            mask_columns = self.mask_columns_override
-        else:
-            mask_columns = [
-                'mask_path',
-                'label_binary_path',
-                'multiclass_id_png',
-                'multiclass_gray_jpg',
-                'multiclass_color_jpg',
-                'metrics_json'
-            ]
+        all_centroids_metadata = []
+        all_filtered_metadata = []
 
-        for idx, row in df.iterrows():
-            patient_id = str(row['patient_id'])
-            img_path = row.get('radiograph_path', None)
-            if dir_root and img_path and not os.path.isabs(img_path):
-                img_path = os.path.join(dir_root, img_path)
+        mask_columns = self._get_mask_columns()
 
+        for _, row in df.iterrows():
+            patient_id = str(row["patient_id"])
+            img_path = self._resolve_path(row.get("radiograph_path", None))
+
+            if not img_path or not os.path.exists(img_path):
+                failed_cases.append({
+                    "patient_id": patient_id,
+                    "reason": "radiograph_not_found",
+                    "radiograph_path": img_path
+                })
+                continue
+
+            img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+            if img is None:
+                failed_cases.append({
+                    "patient_id": patient_id,
+                    "reason": "radiograph_load_failed",
+                    "radiograph_path": img_path
+                })
+                continue
 
             for mask_col in mask_columns:
-                mask_path = row.get(mask_col, None)
-                # Solo procesar si es string y no vacía
-                if not isinstance(mask_path, str) or mask_path.strip() == '':
-                    continue
-                if dir_root and not os.path.isabs(mask_path):
-                    mask_path = os.path.join(dir_root, mask_path)
-                if not os.path.exists(mask_path):
+                mask_path = self._resolve_path(row.get(mask_col, None))
+                if not mask_path or not os.path.exists(mask_path):
                     continue
 
-                print(f"[INFO] Paciente {patient_id} - radiograph_path: {img_path}")
-                print(f"[INFO] Paciente {patient_id} - {mask_col}: {mask_path}")
-                if not img_path or not os.path.exists(img_path):
-                    print(f"[WARN] No existe la radiografía para {patient_id}: {img_path}")
-                    failed_cases.append({'patient_id': patient_id, 'reason': 'radiograph_not_found', 'radiograph_path': img_path, 'mask_col': mask_col, 'mask_path': mask_path})
-                    continue
-                img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
                 mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
-                if img is None or mask is None:
-                    print(f"[WARN] No se pudo cargar imagen o máscara para {patient_id}")
-                    failed_cases.append({'patient_id': patient_id, 'reason': 'no_image_or_mask', 'radiograph_path': img_path, 'mask_col': mask_col, 'mask_path': mask_path})
+                if mask is None:
+                    failed_cases.append({
+                        "patient_id": patient_id,
+                        "reason": "mask_load_failed",
+                        "mask_col": mask_col,
+                        "mask_path": mask_path
+                    })
                     continue
 
-                # 1. Generar parches y curva de centroides sobre la imagen original
                 try:
-                    from colab.src.image_utils.vertebra_component_extractor import VertebraComponentExtractor
                     patch_dir = os.path.join(self.save_root, f"{patient_id}_{mask_col}")
                     os.makedirs(patch_dir, exist_ok=True)
+
                     extractor = VertebraComponentExtractor(
                         image=img,
                         local_mask=mask,
@@ -96,50 +145,67 @@ class DatasetPatchOrchestrator:
                         pad_y=15,
                         save_dir=patch_dir
                     )
-                    # Procesar siempre, sin validar combinaciones válidas
+
                     extractor.run()
-                    df_meta = extractor.save_patches_with_metadata(sample_id=f"{patient_id}_{mask_col}")
-                    # Seleccionar los mejores parches según la máscara
-                    if hasattr(extractor, 'select_best_patches'):
+                    df_meta = extractor.save_patches_with_metadata(
+                        sample_id=f"{patient_id}_{mask_col}"
+                    )
+
+                    if hasattr(extractor, "select_best_patches"):
                         df_meta = extractor.select_best_patches(df_meta)
-                    # Validar overlay corresponde al borde
-                    if hasattr(extractor, 'validate_overlay_borders'):
-                        if not extractor.validate_overlay_borders(df_meta):
-                            print(f"[WARN] Overlay no corresponde al borde para {patient_id} en {mask_col}")
-                            failed_cases.append({'patient_id': patient_id, 'reason': 'overlay_mismatch', 'mask_col': mask_col})
-                            continue
-                    print(f"Parches y centroides originales generados para {patient_id} en {mask_col}")
+
+                    if df_meta is None or df_meta.empty:
+                        failed_cases.append({
+                            "patient_id": patient_id,
+                            "reason": "empty_metadata",
+                            "mask_col": mask_col,
+                            "mask_path": mask_path
+                        })
+                        continue
+
+                    df_meta["patient_id"] = patient_id
+                    df_meta["mask_col"] = mask_col
+                    df_meta["mask_path"] = mask_path
+                    df_meta["radiograph_path"] = img_path
+
+                    centroids_csv = os.path.join(
+                        self.centroid_curve_dir,
+                        f"{patient_id}_{mask_col}_centroids_metadata.csv"
+                    )
+                    df_meta.to_csv(centroids_csv, index=False)
+
+                    all_centroids_metadata.append(df_meta)
+
+                    filtered_rows = self._apply_filters_to_patches(df_meta, patient_id, mask_col)
+                    if filtered_rows:
+                        all_filtered_metadata.append(pd.DataFrame(filtered_rows))
+
                 except Exception as e:
-                    print(f"[ERROR] Falló la generación de parches/centroides originales para {patient_id} en {mask_col}: {e}")
-                    failed_cases.append({'patient_id': patient_id, 'reason': str(e), 'mask_col': mask_col})
-                    continue
+                    failed_cases.append({
+                        "patient_id": patient_id,
+                        "reason": str(e),
+                        "mask_col": mask_col,
+                        "mask_path": mask_path
+                    })
 
-            # 2. Aplicar filtros a cada parche generado
-            if df_meta is not None and not df_meta.empty:
-                for filt in self.filters:
-                    filt_dir = os.path.join(self.save_root, f"{patient_id}_{filt.replace('+','_')}")
-                    os.makedirs(filt_dir, exist_ok=True)
-                    img_dir = os.path.join(patch_dir, "patch_images")
-                    print(f"[INFO] Procesando filtro '{filt}' para paciente {patient_id} en {filt_dir}")
-                    for i, row_patch in df_meta.iterrows():
-                        patch_img_path = row_patch["image_patch_path"]
-                        patch_img = cv2.imread(patch_img_path, cv2.IMREAD_GRAYSCALE)
-                        if patch_img is None:
-                            print(f"[WARN] No se pudo cargar el parche {patch_img_path}")
-                            continue
-                        filtered_patch = apply_filter_chain(patch_img, filt)
-                        out_patch_path = os.path.join(filt_dir, os.path.basename(patch_img_path))
-                        cv2.imwrite(out_patch_path, filtered_patch)
-                        print(f"[INFO] Guardado parche filtrado: {out_patch_path}")
-                    print(f"[INFO] Parches filtrados guardados para {patient_id} con filtro {filt} en {filt_dir}")
+        if all_centroids_metadata:
+            df_centroids = pd.concat(all_centroids_metadata, ignore_index=True)
+            df_centroids.to_csv(
+                os.path.join(self.save_root, "all_centroids_metadata.csv"),
+                index=False
+            )
 
-        # Guardar CSV con los casos fallidos
+        if all_filtered_metadata:
+            df_filtered = pd.concat(all_filtered_metadata, ignore_index=True)
+            df_filtered.to_csv(
+                os.path.join(self.save_root, "all_filtered_patches_metadata.csv"),
+                index=False
+            )
+
         if failed_cases:
-            failed_df = pd.DataFrame(failed_cases)
-            failed_csv_path = os.path.join(self.save_root, "failed_centroid_cases.csv")
-            failed_df.to_csv(failed_csv_path, index=False)
-            print(f"Casos fallidos guardados en {failed_csv_path}")
+            pd.DataFrame(failed_cases).to_csv(
+                os.path.join(self.save_root, "failed_cases.csv"),
+                index=False
+            )
 
-# Ejemplo de uso:
-# orchestrator = DatasetPatchOrchestrator('config_orchestrator.json')
-# orchestrator.run()
+        print("Pipeline finalizado.")
