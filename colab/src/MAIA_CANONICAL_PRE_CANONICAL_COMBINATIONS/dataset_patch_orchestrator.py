@@ -4,10 +4,17 @@ import pandas as pd
 import cv2
 from .apply_filter_chain import apply_filter_chain
 
+
 class DatasetPatchOrchestrator:
-    def __init__(self, config_json_path):
-        with open(config_json_path, 'r') as f:
-            self.config = json.load(f)
+    def __init__(self, config):
+        # Permite pasar un dict o un path a JSON
+        if isinstance(config, dict):
+            self.config = config
+        elif isinstance(config, str):
+            with open(config, 'r') as f:
+                self.config = json.load(f)
+        else:
+            raise TypeError("config debe ser un dict o un path a archivo JSON")
         self.dataset_csv = self.config['dataset_csv']
         self.save_root = self.config['save_root']
         self.filters = self.config['filters']
