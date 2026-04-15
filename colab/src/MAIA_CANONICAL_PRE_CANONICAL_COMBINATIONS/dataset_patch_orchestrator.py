@@ -28,13 +28,19 @@ class DatasetPatchOrchestrator:
         df = pd.read_csv(self.dataset_csv)
 
         failed_cases = []
+        dir_root = self.config.get('dir_root', None)
         for idx, row in df.iterrows():
             patient_id = str(row['patient_id'])
             img_path = row.get('radiograph_path', None)
             mask_path = row.get('mask_path', None)
-
-            # Verifica y muestra la ruta de la radiografía
+            # Si dir_root está definido y la ruta no es absoluta, concatena
+            if dir_root:
+                if img_path and not os.path.isabs(img_path):
+                    img_path = os.path.join(dir_root, img_path)
+                if mask_path and not os.path.isabs(mask_path):
+                    mask_path = os.path.join(dir_root, mask_path)
             print(f"[INFO] Paciente {patient_id} - radiograph_path: {img_path}")
+            print(f"[INFO] Paciente {patient_id} - mask_path: {mask_path}")
             if not img_path or not os.path.exists(img_path):
                 print(f"[WARN] No existe la radiografía para {patient_id}: {img_path}")
                 failed_cases.append({'patient_id': patient_id, 'reason': 'radiograph_not_found', 'radiograph_path': img_path})
@@ -91,6 +97,7 @@ class DatasetPatchOrchestrator:
                     filt_dir = os.path.join(self.save_root, f"{patient_id}_{filt.replace('+','_')}")
                     os.makedirs(filt_dir, exist_ok=True)
                     img_dir = os.path.join(patch_dir, "patch_images")
+                    print(f"[INFO] Procesando filtro '{filt}' para paciente {patient_id} en {filt_dir}")
                     for i, row_patch in df_meta.iterrows():
                         patch_img_path = row_patch["image_patch_path"]
                         patch_img = cv2.imread(patch_img_path, cv2.IMREAD_GRAYSCALE)
@@ -100,7 +107,8 @@ class DatasetPatchOrchestrator:
                         filtered_patch = apply_filter_chain(patch_img, filt)
                         out_patch_path = os.path.join(filt_dir, os.path.basename(patch_img_path))
                         cv2.imwrite(out_patch_path, filtered_patch)
-                    print(f"Parches filtrados guardados para {patient_id} con filtro {filt}")
+                        print(f"[INFO] Guardado parche filtrado: {out_patch_path}")
+                    print(f"[INFO] Parches filtrados guardados para {patient_id} con filtro {filt} en {filt_dir}")
 
         # Guardar CSV con los casos fallidos
         if failed_cases:
