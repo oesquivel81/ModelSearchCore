@@ -250,6 +250,7 @@ class VertebraComponentExtractor:
         rows = []
         curva_rows = []
 
+
         for i, comp in enumerate(self.components):
             img_name = f"{sample_id}_vertebra_{i:02d}.png"
             mask_name = f"{sample_id}_vertebra_{i:02d}_mask.png"
@@ -257,8 +258,10 @@ class VertebraComponentExtractor:
             img_path = os.path.join(img_dir, img_name)
             mask_path = os.path.join(mask_dir, mask_name)
 
-            cv2.imwrite(img_path, comp["patch_img"])
-            cv2.imwrite(mask_path, comp["patch_mask"])
+            img_saved = cv2.imwrite(img_path, comp["patch_img"])
+            mask_saved = cv2.imwrite(mask_path, comp["patch_mask"])
+            print(f"[DEBUG] Guardando imagen: {img_path} - {'OK' if img_saved else 'FALLO'}")
+            print(f"[DEBUG] Guardando máscara: {mask_path} - {'OK' if mask_saved else 'FALLO'}")
 
             x1, y1, x2, y2 = comp["bbox"]
 
