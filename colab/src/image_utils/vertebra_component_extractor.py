@@ -6,6 +6,13 @@ import matplotlib.pyplot as plt
 
 
 class VertebraComponentExtractor:
+        def has_valid_combinations(self):
+            """
+            Verifica si existen componentes extraídos válidos.
+            Puedes ajustar la lógica según lo que consideres una combinación válida.
+            Por defecto, retorna True si hay al menos un componente extraído.
+            """
+            return len(self.components) > 0
     def __init__(
         self,
         image,
