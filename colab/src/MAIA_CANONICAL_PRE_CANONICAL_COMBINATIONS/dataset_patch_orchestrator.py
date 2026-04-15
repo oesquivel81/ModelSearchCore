@@ -32,11 +32,22 @@ class DatasetPatchOrchestrator:
             patient_id = str(row['patient_id'])
             img_path = row.get('radiograph_path', None)
             mask_path = row.get('mask_path', None)
-            img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE) if img_path else None
-            mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE) if mask_path else None
+
+            # Verifica y muestra la ruta de la radiografía
+            print(f"[INFO] Paciente {patient_id} - radiograph_path: {img_path}")
+            if not img_path or not os.path.exists(img_path):
+                print(f"[WARN] No existe la radiografía para {patient_id}: {img_path}")
+                failed_cases.append({'patient_id': patient_id, 'reason': 'radiograph_not_found', 'radiograph_path': img_path})
+                continue
+            if not mask_path or not os.path.exists(mask_path):
+                print(f"[WARN] No existe la máscara para {patient_id}: {mask_path}")
+                failed_cases.append({'patient_id': patient_id, 'reason': 'mask_not_found', 'mask_path': mask_path})
+                continue
+            img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+            mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
             if img is None or mask is None:
                 print(f"[WARN] No se pudo cargar imagen o máscara para {patient_id}")
-                failed_cases.append({'patient_id': patient_id, 'reason': 'no_image_or_mask'})
+                failed_cases.append({'patient_id': patient_id, 'reason': 'no_image_or_mask', 'radiograph_path': img_path, 'mask_path': mask_path})
                 continue
 
             # 1. Generar parches y curva de centroides sobre la imagen original
