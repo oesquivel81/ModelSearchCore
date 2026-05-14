@@ -1,0 +1,9 @@
+relative_path,exists,size_mb,n_files
+backend_loader.py,True,0.0035066604614257812,1
+data/shards_npz,True,0.0,0
+data/patient_images,True,0.0,0
+data/tables,True,0.0,0
+data/validation_grids,True,0.0,0
+models,True,0.0,0
+config,True,0.0005121231079101562,1
+docs,True,0.00162506103515625,1
