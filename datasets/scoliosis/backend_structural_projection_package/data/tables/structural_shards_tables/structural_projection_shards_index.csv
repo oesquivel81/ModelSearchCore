@@ -1,0 +1,5 @@
+shard_idx,shard_path,n_samples,start,end,shape,size_mb
+0,/content/PATIENT_STRUCTURAL_PROJECTION_SHARDS/shards_npz/structural_projection_shard_00000.npz,64,0,64,"(64, 5, 512, 256)",27.693589210510254
+1,/content/PATIENT_STRUCTURAL_PROJECTION_SHARDS/shards_npz/structural_projection_shard_00001.npz,64,64,128,"(64, 5, 512, 256)",36.171786308288574
+2,/content/PATIENT_STRUCTURAL_PROJECTION_SHARDS/shards_npz/structural_projection_shard_00002.npz,64,128,192,"(64, 5, 512, 256)",32.58719539642334
+3,/content/PATIENT_STRUCTURAL_PROJECTION_SHARDS/shards_npz/structural_projection_shard_00003.npz,57,192,249,"(57, 5, 512, 256)",31.370872497558594

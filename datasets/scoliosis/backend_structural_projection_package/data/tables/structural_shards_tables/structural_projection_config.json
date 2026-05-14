@@ -1,0 +1,23 @@
+{
+  "name": "PATIENT_STRUCTURAL_PROJECTION_SHARDS",
+  "source_root": "/content/PATIENT_RECONSTRUCTED_PREDICTIONS_FROM_PATCHES",
+  "output_root": "/content/PATIENT_STRUCTURAL_PROJECTION_SHARDS",
+  "target_h": 512,
+  "target_w": 256,
+  "channels": [
+    "baseline",
+    "binary",
+    "boundary",
+    "intervertebral",
+    "ordinal"
+  ],
+  "x_shape": [
+    249,
+    5,
+    512,
+    256
+  ],
+  "shard_size": 64,
+  "n_patients": 249,
+  "n_shards": 4
+}
