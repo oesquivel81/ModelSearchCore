@@ -1,0 +1,2 @@
+patient_key,status,n_body_peaks,n_gap_peaks,mean_body_prominence,mean_gap_prominence,mean_body_width,mean_gap_width
+S_100,ok,12,10,0.3664403185248375,0.3346405655145645,14.529667774242514,27.44464431145022

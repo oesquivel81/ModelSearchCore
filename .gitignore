@@ -66,3 +66,9 @@ __pycache__/
 # Local
 .env
 >>>>>>> 4432988 (Backup vertebra peak analysis SCOLIOSIS_VERTEBRA_PEAK_ANALYSIS_20260515_200103)
+
+
+__pycache__/
+.ipynb_checkpoints/
+.DS_Store
+*.tmp
