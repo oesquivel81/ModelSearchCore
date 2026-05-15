@@ -1,0 +1,16 @@
+{
+  "experiment_name": "SCOLIOSIS_VERTEBRA_PEAK_ANALYSIS_20260515_200103",
+  "created_at": "2026-05-15T20:01:50.339715",
+  "staging_root": "/content/SCOLIOSIS_VERTEBRA_PEAK_ANALYSIS_20260515_200103",
+  "base_root_expected": "/content/PATIENT_RECONSTRUCTED_PREDICTIONS_FROM_PATCHES",
+  "patients_root_expected": "/content/PATIENT_RECONSTRUCTED_PREDICTIONS_FROM_PATCHES/patients",
+  "drive_backup_root": "/content/drive/MyDrive/TDA_PIPELINE/BACKUPS_VERTEBRA_PEAK_ANALYSIS",
+  "copy_original_npz_shards": false,
+  "important_tables": {
+    "visible_order_clean": "global_outputs/BODY_VERTEBRA_VISIBLE_ORDER_CLEAN/BODY_VERTEBRA_VISIBLE_ORDER_DEDUPED.csv",
+    "forced_k_clustered": "global_outputs/BODY_VERTEBRA_PEAK_SHAPE_CLUSTERING/BODY_VERTEBRA_PEAK_FORCED_K_CLUSTERED_ORDERED.csv",
+    "body_wave_metrics": "global_outputs/COMPOSITE_BINARY_BOUNDARY_INTER_PEAKS/wave_metrics/ALL_body_composite_peak_wave_metrics.csv",
+    "gap_wave_metrics": "global_outputs/COMPOSITE_BINARY_BOUNDARY_INTER_PEAKS/wave_metrics/ALL_gap_composite_peak_wave_metrics.csv",
+    "geometry_metrics": "global_outputs/RADIOGRAPH_GEOMETRY_METRICS/tables/radiograph_geometry_metrics_flat.csv"
+  }
+}
