@@ -1,0 +1,2 @@
+patient_key,status,n_body_peaks,n_gap_peaks,mean_weighted_peak_value,mean_gap_value
+S_100,ok,12,10,0.8655446171760559,0.8619100451469421

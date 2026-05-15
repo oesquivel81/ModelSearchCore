@@ -1,0 +1,24 @@
+{
+  "patient_key": "S_151",
+  "n_patches": 8,
+  "shape": [
+    806,
+    297
+  ],
+  "regions_present": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+  ],
+  "n_regions_present": 8,
+  "binary_mean": 0.14469777047634125,
+  "boundary_mean": 0.06948274374008179,
+  "intervertebral_mean": 0.08647052943706512,
+  "ordinal_mean": 0.09908466041088104,
+  "ordinal_nonzero": 67035
+}
