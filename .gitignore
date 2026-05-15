@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Python
 __pycache__/
 *.pyc
@@ -43,3 +44,25 @@ colab/outputs/embeddings/*
 *.pt
 *.pth
 *.ckpt
+=======
+
+# Large files
+*.tar.gz
+*.zip
+*.pt
+*.pth
+*.npz
+*.npy
+*.png
+*.jpg
+*.jpeg
+*.webp
+
+# Python
+__pycache__/
+.ipynb_checkpoints/
+.DS_Store
+
+# Local
+.env
+>>>>>>> 4432988 (Backup vertebra peak analysis SCOLIOSIS_VERTEBRA_PEAK_ANALYSIS_20260515_200103)
